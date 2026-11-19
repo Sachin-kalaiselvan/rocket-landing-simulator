@@ -1,0 +1,1329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rocket Landing Simulator</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* VOICE: a flight-test range console at dawn — exact numbers, calm, no decoration that isn't data.
+   IDEA: the range-safety display: live vehicle, its planned path and the envelope it must stay inside.
+   PICTURE: the 3D landing zone with booster, plume, planned trajectory and glide-slope cone, full bleed.
+   COLOUR and TYPE: desert sand + graphite, international orange for the vehicle and its plan; Barlow Semi Condensed numerals, IBM Plex text.
+   LAYOUT: top bar of views; mission = stage + telemetry rail; other views are paper sheets of charts and tables. */
+:root{color-scheme:light dark;
+--paper:light-dark(#f4ede1,#141518);--sheet:light-dark(#fffaf2,#1c1d21);--ink:light-dark(#1d1f23,#ece7dd);--mute:light-dark(#6b6a66,#9c9a93);
+--line:light-dark(#ddd2bf,#2e3036);--orange:#ff4f1a;--orange2:light-dark(#d93c0c,#ff7547);--steel:light-dark(#4f5a66,#a7b3bf);--ok:light-dark(#1f7a4a,#5fd39a);--bad:light-dark(#b3261e,#ff7a70);
+--graph:#17191c;--graph2:#22252a;--glass:rgba(18,20,24,.78)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+html,body{height:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.55 "IBM Plex Sans",system-ui,sans-serif;overflow-x:clip}
+h1,h2,h3,.num,.brand,nav a,button,.k{font-family:"Barlow Semi Condensed","Arial Narrow",sans-serif}
+.num{font-variant-numeric:tabular-nums}
+header{position:sticky;top:0;z-index:20;background:var(--graph);color:#f2ede4;display:flex;align-items:center;gap:18px;padding:0 max(2vw,14px);min-height:56px;flex-wrap:wrap}
+.brand{font-weight:700;font-size:19px;display:flex;align-items:center;gap:10px;white-space:nowrap}
+.brand svg{flex:none}
+nav{display:flex;gap:2px;flex-wrap:wrap;margin-left:auto}
+nav a{color:#c9c3b8;text-decoration:none;font-weight:600;font-size:16px;padding:8px 12px;border-radius:8px;min-height:40px;display:flex;align-items:center;position:relative;transition:color .2s}
+nav a:hover{color:#fff}nav a.on{color:#fff}
+nav a.on::after{content:"";position:absolute;left:12px;right:12px;bottom:4px;height:3px;border-radius:2px;background:var(--orange);animation:grow .35s ease}
+@keyframes grow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+main{position:relative}
+.view{display:none}
+.view.on{display:block;animation:viewin .45s cubic-bezier(.2,.8,.2,1)}
+@keyframes viewin{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+/* mission */
+#mission.on{display:grid}
+#mission{grid-template-columns:minmax(0,1fr) 330px;height:calc(100vh - 56px);min-height:560px;background:var(--graph)}
+.stage{position:relative;overflow:hidden;background:#cfb28d}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+.stage canvas:active{cursor:grabbing}
+.over{position:absolute;pointer-events:none;color:#f6f1e8}
+.clock{left:18px;top:14px}
+.clock .t{font:700 44px/1 "Barlow Semi Condensed";letter-spacing:.5px;text-shadow:0 2px 12px rgba(0,0,0,.35)}
+.clock .s{font:600 15px "Barlow Semi Condensed";background:var(--glass);display:inline-flex;gap:8px;align-items:center;padding:4px 10px;border-radius:999px;margin-top:6px}
+.dot{width:8px;height:8px;border-radius:50%;background:#8b8f96}
+.dot.live{background:var(--orange);box-shadow:0 0 0 0 rgba(255,79,26,.7);animation:pulse 1.4s infinite}
+@keyframes pulse{70%{box-shadow:0 0 0 9px rgba(255,79,26,0)}100%{box-shadow:0 0 0 0 rgba(255,79,26,0)}}
+.cams{right:14px;top:14px;pointer-events:auto;display:flex;gap:4px;background:var(--glass);padding:4px;border-radius:12px}
+.cams button{background:transparent;color:#d9d4ca;border:0;border-radius:9px;padding:6px 11px;font-weight:600;font-size:15px;min-height:36px;cursor:pointer}
+.cams button.on{background:#f4ede1;color:#17191c}
+.bar{left:14px;right:14px;bottom:14px;pointer-events:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.btn{font-weight:700;font-size:17px;border:0;border-radius:12px;padding:10px 18px;min-height:46px;cursor:pointer;background:#f4ede1;color:#17191c;transition:transform .15s,background .2s}
+.btn:hover{transform:translateY(-1px)}.btn:active{transform:translateY(1px)}
+.btn.go{background:var(--orange);color:#fff}
+.btn.ghost{background:var(--glass);color:#f2ede4}
+.btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
+.btn:focus-visible,nav a:focus-visible,.cams button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #ffb59c;outline-offset:2px}
+.speed{display:flex;background:var(--glass);border-radius:12px;padding:4px}
+.speed button{background:none;border:0;color:#d9d4ca;font:600 15px "Barlow Semi Condensed";padding:6px 10px;border-radius:9px;min-height:38px;cursor:pointer}
+.speed button.on{background:#f4ede1;color:#17191c}
+.banner{left:50%;top:10%;transform:translateX(-50%);text-align:center;background:var(--glass);padding:18px 24px;border-radius:16px;max-width:min(460px,86%);opacity:0;transition:opacity .35s,transform .35s}
+.banner.show{opacity:1;transform:translate(-50%,-6px);pointer-events:auto}
+.banner h2{margin:0 0 4px;font-size:30px;line-height:1.05}
+.banner p{margin:0 0 12px;color:#d3cdc2;font-size:15px}
+.banner .row{display:flex;gap:16px;justify-content:center;margin:10px 0 14px;flex-wrap:wrap}
+.banner .row div{font:600 14px "Barlow Semi Condensed";color:#bdb7ac}.banner .row b{display:block;font-size:24px;color:#fff}
+.banner .acts{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.solving{display:flex;gap:4px;justify-content:center;margin:8px 0 2px}
+.solving i{width:7px;height:22px;border-radius:3px;background:#555a61;transition:background .2s,height .2s}
+.solving i.ok{background:var(--orange);height:28px}.solving i.x{background:#7a3a2c}
+/* rail */
+.rail{background:var(--graph2);color:#ece7dd;overflow-y:auto;padding:16px 16px 20px;display:grid;gap:14px;align-content:start}
+.rail h3{margin:0;font-size:15px;color:#a39d92;font-weight:600}
+.tele{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tele div{background:#1a1c20;border-radius:12px;padding:10px 12px}
+.tele span{display:block;font:600 13px "Barlow Semi Condensed";color:#9a948a}
+.tele b{font:700 27px/1.1 "Barlow Semi Condensed";font-variant-numeric:tabular-nums;white-space:nowrap}
+.tele small{font-size:14px;color:#9a948a;font-weight:500}
+.meter{background:#1a1c20;border-radius:12px;padding:10px 12px}
+.meter .top{display:flex;justify-content:space-between;font:600 14px "Barlow Semi Condensed";color:#9a948a}
+.meter .top b{color:#ece7dd;font-size:16px}
+.track{position:relative;height:12px;border-radius:6px;background:#2c2f35;margin-top:8px;overflow:hidden}
+.track .fill{position:absolute;left:0;top:0;bottom:0;background:var(--orange);border-radius:6px;transition:width .12s linear}
+.track .mark{position:absolute;top:-2px;bottom:-2px;width:2px;background:#ece7dd;opacity:.7}
+.guid{background:#1a1c20;border-radius:12px;padding:10px 12px;font-size:14px;display:grid;gap:4px}
+.guid div{display:flex;justify-content:space-between;gap:8px}.guid span{color:#9a948a}
+.guid b{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:13px;white-space:nowrap}
+.feed{list-style:none;margin:0;padding:0;display:grid;gap:6px;font-size:14px}
+.feed li{display:grid;grid-template-columns:52px 1fr;gap:8px;animation:viewin .4s ease}
+.feed li time{font:600 14px "Barlow Semi Condensed";color:#ff8d66;font-variant-numeric:tabular-nums}
+.feed li.fault time{color:#ff6b5e}.feed li.fault{color:#ffcfc9}
+/* sheets */
+.sheet{max-width:1240px;margin:0 auto;padding:clamp(22px,4vw,48px) max(4vw,16px) 64px}
+.sheet h1{font-size:clamp(32px,4.6vw,50px);line-height:1.05;margin:0 0 8px;text-wrap:balance}
+.lede{color:var(--mute);max-width:68ch;margin:0 0 24px}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.card{background:var(--sheet);border:1px solid var(--line);border-radius:16px;padding:16px 18px}
+.card h2{font-size:22px;margin:0 0 2px}
+.card .sub{color:var(--mute);font-size:14px;margin:0 0 8px}
+.fig{position:relative;min-height:260px}.fig>svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.fig .axis{stroke:var(--line)}.fig text{fill:var(--mute);font:13px "IBM Plex Sans"}
+.draw{stroke-dasharray:4000;stroke-dashoffset:4000;animation:drawl 1.3s ease forwards}
+@keyframes drawl{to{stroke-dashoffset:0}}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:14px;color:var(--mute);margin-top:6px}
+.legend i{display:inline-block;width:18px;height:3px;border-radius:2px;margin-right:6px;vertical-align:middle}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:0 0 18px}
+.stats div{background:var(--sheet);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.stats span{display:block;color:var(--mute);font-size:14px}.stats b{font:700 30px/1.1 "Barlow Semi Condensed";font-variant-numeric:tabular-nums}
+.empty{padding:40px 10px;text-align:center;color:var(--mute)}
+/* scenarios */
+.scen{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px;margin-bottom:22px}
+.sc{background:var(--sheet);border:2px solid var(--line);border-radius:16px;padding:14px 16px;cursor:pointer;text-align:left;font:inherit;color:inherit;transition:border-color .2s,transform .2s}
+.sc:hover{transform:translateY(-2px)}.sc.on{border-color:var(--orange)}
+.sc h3{margin:0 0 4px;font-size:21px}.sc p{margin:0;color:var(--mute);font-size:14px}
+.sc svg{display:block;margin-bottom:8px}
+.form{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px 16px}
+label{display:grid;gap:4px;font-size:14px;color:var(--mute)}
+input,select{font:16px "IBM Plex Sans";color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-height:44px;width:100%}
+.lbtn{background:var(--ink);color:var(--paper)}
+table{width:100%;border-collapse:collapse;font-size:15px}
+th{text-align:left;color:var(--mute);font-weight:500;padding:8px;border-bottom:1px solid var(--line)}
+td{padding:10px 8px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums;white-space:nowrap}
+td.r,th.r{text-align:right}
+.pill{display:inline-block;padding:2px 10px;border-radius:999px;font-size:13px;font-weight:600}
+.pill.ok{background:color-mix(in srgb,var(--ok) 16%,transparent);color:var(--ok)}
+.pill.bad{background:color-mix(in srgb,var(--bad) 16%,transparent);color:var(--bad)}
+.scroll{overflow-x:auto}
+.prose{max-width:72ch}.prose h2{font-size:26px;margin:28px 0 6px}.prose p{margin:0 0 12px}
+.eq{font-family:"IBM Plex Mono",monospace;font-size:14px;background:var(--sheet);border:1px solid var(--line);border-radius:12px;padding:14px 16px;overflow-x:auto;line-height:1.8;white-space:pre}
+.dialog{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;place-items:center;z-index:50}
+.dialog.show{display:grid}.dialog .card{max-width:380px}
+.chip{display:inline-block;font:600 13px "Barlow Semi Condensed";letter-spacing:.3px;color:var(--steel);border:1px solid var(--line);border-radius:999px;padding:1px 9px;margin-bottom:6px}
+.vgrid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:18px;margin-bottom:18px}
+.vread{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:6px}
+.vread div{background:var(--paper);border-radius:12px;padding:10px 12px}.vread span{display:block;color:var(--mute);font-size:13px}.vread b{font:700 24px/1.1 "Barlow Semi Condensed";font-variant-numeric:tabular-nums}
+.vread .warn b{color:var(--bad)}
+.vnote{font-size:14px;color:var(--mute);margin:10px 0 0}.vnote.bad{color:var(--bad)}
+.acts2{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 18px}
+.rb-run{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:16px}
+.prog{height:10px;border-radius:5px;background:var(--line);overflow:hidden;margin-top:14px}
+.prog-fill{height:100%;width:0;background:linear-gradient(90deg,var(--orange),#ff9a6b);border-radius:5px;transition:width .4s ease}
+.prog.run .prog-fill{background:repeating-linear-gradient(-45deg,var(--orange) 0 12px,#ff7a4d 12px 24px);background-size:34px 34px;animation:barber 1s linear infinite}
+@keyframes barber{to{background-position:34px 0}}
+.fig.sq{min-height:0;aspect-ratio:1/1;max-height:440px}
+.dotp{animation:pop .45s cubic-bezier(.2,1.6,.4,1) both;transform-box:fill-box;transform-origin:center}
+@keyframes pop{from{transform:scale(0);opacity:0}}
+.barr{animation:rise .6s cubic-bezier(.2,.8,.2,1) both;transform-box:fill-box;transform-origin:bottom}
+@keyframes rise{from{transform:scaleY(0)}}
+.fails{display:grid;gap:8px;max-height:360px;overflow-y:auto}
+.fail{display:grid;grid-template-columns:1fr auto;gap:4px 10px;align-items:center;background:var(--paper);border-radius:12px;padding:10px 12px;animation:viewin .4s ease both}
+.fail b{font-size:15px}.fail small{grid-column:1;color:var(--mute);font-size:13px}.fail button{grid-row:1/3;grid-column:2}
+.sbtn{font:600 15px "Barlow Semi Condensed";border:1px solid var(--line);background:var(--sheet);color:var(--ink);border-radius:10px;padding:6px 12px;min-height:38px;cursor:pointer}
+.sbtn:hover{border-color:var(--orange)}
+.cause{display:flex;justify-content:space-between;gap:10px;font-size:15px;padding:6px 0;border-bottom:1px solid var(--line)}
+nav a .pct{font-size:12px;color:#ff9a6b;margin-left:5px}
+@media(max-width:900px){.vgrid{grid-template-columns:1fr}}
+@media(max-width:900px){#mission{grid-template-columns:1fr;height:auto}.stage{height:62vh;min-height:380px}.rail{max-height:none}.grid2{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){.banner{top:12px;padding:12px 14px;width:calc(100% - 24px);max-width:none}.banner h2{font-size:22px}.banner p{font-size:13px;margin-bottom:6px}.banner .row{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px;margin:6px 0 10px}.banner .row b{font-size:18px}.banner .btn{min-height:40px;padding:8px 12px;font-size:15px}.cams{top:12px;right:10px}.cams button{padding:6px 8px;font-size:14px}header{padding-block:6px}nav{margin-left:0}nav a{padding:6px 9px;font-size:15px}.clock .t{font-size:34px}.btn{font-size:16px;padding:9px 14px}
+table{font-size:13px}.stack thead{display:none}.stack tr{display:grid;padding-block:10px}.stack td{display:flow-root;border:0;padding:3px 0;padding-inline-start:8em;text-align:start;white-space:normal}.stack td::before{content:attr(data-l);float:inline-start;width:7.5em;margin-inline-start:-8em;color:var(--mute)}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+<script>new MutationObserver(()=>{for(const c of document.querySelectorAll('.stack td:not([data-l])')){let i=0,p=c;while(p=p.previousElementSibling)i+=p.colSpan;c.dataset.l=c.closest('table').rows[0].cells[i]?.textContent||''}}).observe(document,{childList:true,subtree:true})</script>
+</head>
+<body>
+<header>
+  <div class="brand"><svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><path d="M13 2c3 3 4 7 4 11v6h-8v-6c0-4 1-8 4-11z" fill="#ff4f1a"/><path d="M9 19l-3 4h4zm8 0l3 4h-4z" fill="#f4ede1"/></svg>Rocket Landing Simulator</div>
+  <nav id="nav">
+    <a href="#mission">Mission</a><a href="#planner">Planner</a><a href="#scenarios">Scenarios</a><a href="#reliab" id="navRb">Reliability</a><a href="#log">Flight log</a><a href="#method">How it works</a>
+  </nav>
+</header>
+<main>
+<section class="view" id="mission">
+  <div class="stage" id="stage">
+    <canvas id="gl" aria-label="3D view of the booster and landing pad"></canvas>
+    <div class="over clock"><div class="t num" id="clock">T+ 0.0</div><div class="s"><i class="dot" id="dot"></i><span id="phase">Ready on the range</span></div></div>
+    <div class="over cams" id="cams" role="group" aria-label="Camera">
+      <button data-cam="chase" class="on">Chase</button><button data-cam="pad">Pad</button><button data-cam="wide">Wide</button>
+    </div>
+    <div class="over banner" id="banner"></div>
+    <div class="over bar">
+      <button class="btn go" id="launch">Start descent</button>
+      <button class="btn ghost" id="pause" disabled>Pause</button>
+      <button class="btn ghost" id="kick" disabled title="Hit the vehicle with a sideways shove">Shove</button>
+      <div class="speed" id="speed" role="group" aria-label="Simulation speed"><button data-s="1" class="on">1×</button><button data-s="2">2×</button><button data-s="4">4×</button></div>
+    </div>
+  </div>
+  <aside class="rail">
+    <h3 id="scenName">Scenario</h3>
+    <div class="tele">
+      <div><span>Altitude</span><b class="num" id="tAlt">–</b></div>
+      <div><span>Vertical speed</span><b class="num" id="tVs">–</b></div>
+      <div><span>Ground speed</span><b class="num" id="tHs">–</b></div>
+      <div><span>Distance to pad</span><b class="num" id="tMiss">–</b></div>
+    </div>
+    <div class="meter"><div class="top">Throttle <b class="num" id="tThr">0%</b></div><div class="track"><div class="fill" id="thrFill"></div><div class="mark" style="left:40%" title="Minimum throttle"></div><div class="mark" id="thrMax" style="left:100%"></div></div></div>
+    <div class="meter"><div class="top">Propellant <b class="num" id="tFuel">6,000 kg</b></div><div class="track"><div class="fill" id="fuelFill" style="width:100%;background:#e9d9bf"></div></div></div>
+    <div class="guid">
+      <div><span>Guidance</span><b id="gMode">idle</b></div>
+      <div><span>Time to touchdown</span><b id="gTgo">–</b></div>
+      <div><span>Last solve</span><b id="gSolve">–</b></div>
+      <div><span>Re-plans</span><b id="gRe">0</b></div>
+      <div><span>Wind</span><b id="gWind">–</b></div>
+    </div>
+    <h3>Flight events</h3>
+    <ul class="feed" id="feed"></ul>
+  </aside>
+</section>
+
+<section class="view" id="planner"><div class="sheet">
+  <h1 id="plTitle">The planner re-solves the landing about once a second</h1>
+  <p class="lede">Each solve finds the fuel-cheapest thrust profile that still lands on the pad, inside the thrust, tilt and glide-slope limits. Charts show the latest flight.</p>
+  <div class="stats" id="plStats"></div>
+  <div class="acts2"><button class="btn lbtn dl" id="dlFlight" type="button" hidden>Download flight data (CSV)</button><button class="btn lbtn dl" id="dlPlan" type="button" hidden>Download latest plan (CSV)</button></div>
+  <div class="grid2">
+    <div class="card"><h2>Altitude</h2><p class="sub">Flown path against the opening plan and the latest re-plan</p><div class="fig"><svg id="chAlt"></svg></div><div class="legend"><span><i style="background:var(--ink)"></i>Flown</span><span><i style="background:var(--steel)"></i>Opening plan</span><span><i style="background:var(--orange)"></i>Latest plan</span></div></div>
+    <div class="card"><h2>Thrust profile</h2><p class="sub">Thrust acceleration with the engine's minimum and maximum. Fuel-optimal means riding the limits.</p><div class="fig"><svg id="chThr"></svg></div><div class="legend"><span><i style="background:var(--ink)"></i>Flown</span><span><i style="background:var(--orange)"></i>Opening plan (dashed) and latest</span><span><i style="background:var(--steel)"></i>Engine limits</span></div></div>
+    <div class="card"><h2>Choosing the landing time</h2><p class="sub">Propellant needed for each candidate flight time in the opening search. Crosses had no safe solution.</p><div class="fig"><svg id="chTf"></svg></div></div>
+    <div class="card"><h2>Solver convergence</h2><p class="sub">Residuals of the last solve, log scale. It stops when both drop below 2×10⁻⁵.</p><div class="fig"><svg id="chConv"></svg></div><div class="legend"><span><i style="background:var(--orange)"></i>Primal</span><span><i style="background:var(--steel)"></i>Dual</span></div></div>
+  </div>
+</div></section>
+
+<section class="view" id="scenarios"><div class="sheet">
+  <h1>Pick a vehicle, a world and the trouble</h1>
+  <p class="lede">Each scenario sets the vehicle, where it lands and what goes wrong. Change anything below, including the vehicle itself, then fly it. "Too late to stop" is meant to fail: the planner should prove no safe landing exists.</p>
+  <div class="scen" id="scenList"></div>
+  <div class="vgrid">
+    <div class="card"><h2>Vehicle</h2><p class="sub">Start from a preset or type in your own numbers. Thrust in kilonewtons, mass in kilograms.</p>
+      <form class="form" id="vehForm"></form></div>
+    <div class="card"><h2>What this vehicle can do</h2><p class="sub">Worked out from the numbers on the left</p><div class="vread" id="vehRead"></div><p class="vnote" id="vehNote"></p></div>
+  </div>
+  <div class="card">
+    <h2>Flight settings</h2><p class="sub">Positions in metres from the pad, speeds in m/s. Up is positive.</p>
+    <form class="form" id="cfgForm"></form>
+    <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap"><button class="btn go" id="flyCfg" type="button">Fly this scenario</button></div>
+  </div>
+</div></section>
+
+<section class="view" id="reliab"><div class="sheet">
+  <h1 id="rbTitle">Fly the same landing many times and count how often it works</h1>
+  <p class="lede">Takes the current scenario and vehicle and flies it again and again, each time with a different start, wind and engine health. Every flight runs the full planner with re-plans, spread across background workers.</p>
+  <div class="card">
+    <h2 id="rbScen">Current scenario</h2><p class="sub" id="rbScenSub"></p>
+    <form class="form" id="rbForm">
+      <label>Number of flights<select id="rbN"><option>25</option><option selected>50</option><option>100</option><option>250</option></select></label>
+      <label>Strongest wind (m/s)<input id="rbWind" type="number" min="0" max="25" step="0.5" value="12"></label>
+      <label>Flights with an engine fault (%)<input id="rbFault" type="number" min="0" max="100" step="5" value="20"></label>
+      <label>How much the start varies<select id="rbSpread"><option value="0.5">A little</option><option value="1" selected>Normal</option><option value="1.5">A lot</option></select></label>
+    </form>
+    <div class="rb-run"><button class="btn go" id="rbGo" type="button">Run the test</button><button class="btn lbtn" id="rbStop" type="button" hidden>Stop</button><button class="btn lbtn dl" id="rbCsv" type="button" hidden>Download results (CSV)</button></div>
+    <div class="prog" id="rbProgBox"><div class="prog-fill" id="rbProg"></div></div><p class="sub" id="rbProgT" style="margin-top:8px"></p>
+  </div>
+  <div class="stats" id="rbStats" style="margin-top:18px"></div>
+  <div class="grid2">
+    <div class="card"><h2>Where they touched down</h2><p class="sub">Seen from above. The ring is the edge of the 25 m pad; each dot is one flight.</p><div class="fig sq"><svg id="rbScatter"></svg></div>
+      <div class="legend"><span><i style="background:var(--ok)"></i>Landed</span><span><i style="background:#e0a100"></i>Hard or off the pad</span><span><i style="background:var(--bad)"></i>Lost</span></div></div>
+    <div class="card"><h2>Touchdown speed</h2><p class="sub">How fast each flight was coming down when it touched. Above 3 m/s is a hard landing, above 8 m/s the vehicle is lost.</p><div class="fig"><svg id="rbHist"></svg></div></div>
+    <div class="card"><h2>Distance from centre against wind</h2><p class="sub">Does stronger wind push the landing off the mark? Hollow dots had an engine fault.</p><div class="fig"><svg id="rbWindCh"></svg></div></div>
+    <div class="card"><h2>What went wrong</h2><p class="sub">Failed flights with their conditions. Replay any of them in 3D.</p><div id="rbCauses"></div><div class="fails" id="rbFail"></div></div>
+  </div>
+</div></section>
+
+<section class="view" id="log"><div class="sheet">
+  <h1 id="logTitle">Flight log</h1>
+  <p class="lede">Every flight you finish is kept in this browser.</p>
+  <div class="stats" id="logStats"></div>
+  <div class="card"><div class="scroll"><table class="stack" id="logTable"></table></div>
+  <div style="margin-top:14px"><button class="btn lbtn" id="clearLog" type="button">Clear log</button></div></div>
+</div></section>
+
+<section class="view" id="method"><div class="sheet prose">
+  <h1>Fuel-optimal landing, solved live in your browser</h1>
+  <p class="lede">The guidance is the same idea used for reusable boosters and Mars landers: turn the landing into a convex optimisation problem, which can be solved fast and reliably on board, then solve it again and again as the vehicle drifts.</p>
+  <h2>The problem it solves</h2>
+  <p>Given where the booster is and how fast it is moving, find the thrust at each of 30 time steps that lands it on the pad at zero speed using the least propellant. The engine cannot throttle below 40%, so the true problem is not convex. A standard trick called lossless convexification adds a slack variable σ for the thrust size; the relaxed problem is convex, and its optimum provably sits on the real limits.</p>
+  <div class="eq">minimise    Σ σₖ Δt                  propellant
+subject to  exact dynamics with gravity
+            r_N = pad,  v_N = 0
+            ‖aₖ‖ ≤ σₖ                 thrust size, relaxed
+            T_min/m ≤ σₖ ≤ T_max/m    throttle limits
+            tilt(aₖ) ≤ 26°            engine pointing
+            height ≥ tan 20° × range  glide slope</div>
+  <h2>The solver</h2>
+  <p>There is no optimisation library here. The page carries its own conic solver, written from scratch: the trajectory is folded into 120 thrust variables, every constraint becomes a projection onto a cone or a box, and an ADMM loop (the method behind the OSQP solver) alternates between one cached linear solve and those projections. It retunes its step size as it goes. The flight time is not known in advance, so the opening plan runs a golden-section search over it, about 18 solves.</p>
+  <h2>Flying it</h2>
+  <p>The plan runs in a background worker while the 120 Hz flight model keeps going. The vehicle follows the plan with a feedback tracker; about every second the planner re-solves from the current state, keeping the same touchdown time if it can and slipping it a little if not. When wind, a shove or an engine fault knocks it off course, the next solve absorbs it. If no safe landing exists, the solver reports that instead of pretending.</p>
+  <h2>Other vehicles and worlds</h2>
+  <p>The same guidance flies a small test hopper, a Mars lander in thin air and a lunar lander in vacuum. Gravity, air density and the vehicle's mass, thrust range and engine efficiency all feed straight into the problem, so you can type in your own vehicle and see whether it can land at all.</p>
+  <h2>Reliability testing</h2>
+  <p>One good landing proves little. The Reliability view flies a scenario dozens or hundreds of times with random start states, wind, gusts and engine faults, each one a full flight with the planner in the loop, and reports how many land, how hard and how far from centre. When a plan is impossible with the normal thrust reserve the planner tries again using nearly all the thrust there is; if that also fails it brakes as hard as it can.</p>
+  <h2>What is simplified</h2>
+  <p>A point-mass vehicle with ideal attitude control, one engine, a simple drag model for wind, and flat ground. Mass loss is handled by successive approximation inside each solve.</p>
+  <p id="methodStats" class="lede"></p>
+</div></section>
+</main>
+<div class="dialog" id="confirm"><div class="card"><h2>Clear the flight log?</h2><p class="sub">This removes every saved flight from this browser.</p><div style="display:flex;gap:8px;margin-top:12px"><button class="btn go" id="cYes">Clear</button><button class="btn lbtn" id="cNo">Keep</button></div></div></div>
+
+<script type="text/plain" id="solver-src">// Powered-descent guidance: lossless-convexified fuel-optimal landing (G-FOLD style),
+// solved with an operator-splitting (ADMM) conic solver written from scratch.
+// Units inside the solver are scaled so gravity = 1.
+function cholesky(A, n) {
+  const L = new Float64Array(n * n);
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j <= i; j++) {
+      let s = A[i * n + j];
+      for (let k = 0; k < j; k++) s -= L[i * n + k] * L[j * n + k];
+      if (i === j) { if (s <= 0) s = 1e-12; L[i * n + i] = Math.sqrt(s); }
+      else L[i * n + j] = s / L[j * n + j];
+    }
+  }
+  return L;
+}
+function cholSolve(L, n, b, out) {
+  for (let i = 0; i < n; i++) { let s = b[i]; for (let k = 0; k < i; k++) s -= L[i * n + k] * out[k]; out[i] = s / L[i * n + i]; }
+  for (let i = n - 1; i >= 0; i--) { let s = out[i]; for (let k = i + 1; k < n; k++) s -= L[k * n + i] * out[k]; out[i] = s / L[i * n + i]; }
+  return out;
+}
+// projection onto circular cone {x : |x_perp| <= tan(alpha) * (x . axis)}; axis = last component index ax
+function projCone(s, off, dim, ax, tanA) {
+  let y = s[off + ax], n2 = 0;
+  for (let i = 0; i < dim; i++) if (i !== ax) n2 += s[off + i] * s[off + i];
+  const n = Math.sqrt(n2);
+  if (n <= tanA * y) return;
+  if (tanA * n <= -y || (n < 1e-14 && y <= 0)) { for (let i = 0; i < dim; i++) s[off + i] = 0; return; }
+  const ca = 1 / Math.sqrt(1 + tanA * tanA), sa = tanA * ca;
+  const t = n * sa + y * ca;
+  for (let i = 0; i < dim; i++) if (i !== ax) s[off + i] = t * sa * s[off + i] / n;
+  s[off + ax] = t * ca;
+}
+
+// p: {r0:[3], v0:[3], tf, N, amin:[N], amax:[N], tanGlide, tanPoint, warm}
+// all in scaled units (g = 1 pointing -y). Returns plan + diagnostics.
+function solveLanding(p) {
+  const N = p.N, dt = p.tf / N, n = 4 * N;
+  const g = [0, -1, 0];
+  // rows: blocks {type, rows:[{coef:Map idx->val, h}], ...}
+  const rows = []; // each row: {idx:Int32Array, val:Float64Array, h}
+  const blocks = [];
+  const addRow = (coefs, h) => { rows.push({ idx: Int32Array.from(coefs.map(c => c[0])), val: Float64Array.from(coefs.map(c => c[1])), h }); return rows.length - 1; };
+  const posRow = (k, d) => { // r_k component d as affine in a
+    const tk = k * dt, coefs = [];
+    for (let j = 0; j < k; j++) coefs.push([3 * j + d, dt * dt * (k - j - 0.5)]);
+    return addRow(coefs, p.r0[d] + p.v0[d] * tk + 0.5 * g[d] * tk * tk);
+  };
+  const velRow = (k, d) => {
+    const tk = k * dt, coefs = [];
+    for (let j = 0; j < k; j++) coefs.push([3 * j + d, dt]);
+    return addRow(coefs, p.v0[d] + g[d] * tk);
+  };
+  // terminal equalities
+  blocks.push({ type: 'zero', start: rows.length, dim: 3, rho: 400 }); for (let d = 0; d < 3; d++) posRow(N, d);
+  blocks.push({ type: 'zero', start: rows.length, dim: 3, rho: 400 }); for (let d = 0; d < 3; d++) velRow(N, d);
+  // glide slope cone on r_k (axis y): |(x,z)| <= y / tanGlide
+  for (let k = 1; k < N; k++) { blocks.push({ type: 'cone', start: rows.length, dim: 3, ax: 1, tanA: 1 / p.tanGlide, rho: 1 }); for (let d = 0; d < 3; d++) posRow(k, d); }
+  for (let k = 0; k < N; k++) {
+    // thrust pointing cone on a_k
+    blocks.push({ type: 'cone', start: rows.length, dim: 3, ax: 1, tanA: p.tanPoint, rho: 1 });
+    for (let d = 0; d < 3; d++) addRow([[3 * k + d, 1]], 0);
+    // |a_k| <= sigma_k  (4-D second-order cone, axis = sigma)
+    blocks.push({ type: 'cone', start: rows.length, dim: 4, ax: 3, tanA: 1, rho: 1 });
+    for (let d = 0; d < 3; d++) addRow([[3 * k + d, 1]], 0);
+    addRow([[3 * N + k, 1]], 0);
+    // amin <= sigma_k <= amax
+    blocks.push({ type: 'box', start: rows.length, dim: 1, lo: p.amin[k], hi: p.amax[k], rho: 1 });
+    addRow([[3 * N + k, 1]], 0);
+  }
+  const m = rows.length;
+  let rho0 = p.rho || 0.1;
+  const sig = 1e-6, alpha = 1.6, eps = 1e-7;
+  const R = new Float64Array(m);
+  const K = new Float64Array(n * n);
+  let L;
+  const factor = () => {
+    for (const b of blocks) for (let i = 0; i < b.dim; i++) R[b.start + i] = rho0 * b.rho;
+    K.fill(0);
+    for (let i = 0; i < n; i++) K[i * n + i] = eps + sig;
+    for (let r = 0; r < m; r++) {
+      const { idx, val } = rows[r], w = R[r];
+      for (let a = 0; a < idx.length; a++) for (let b = 0; b < idx.length; b++) K[idx[a] * n + idx[b]] += w * val[a] * val[b];
+    }
+    L = cholesky(K, n);
+  };
+  factor();
+  const c = new Float64Array(n); for (let k = 0; k < N; k++) c[3 * N + k] = dt;
+  let cInf = 0; for (let i = 0; i < n; i++) cInf = Math.max(cInf, Math.abs(c[i]));
+  let x = new Float64Array(n), z = new Float64Array(m), y = new Float64Array(m);
+  if (p.warm && p.warm.x && p.warm.x.length === n) { x.set(p.warm.x); }
+  const Fx = (xv, out) => { for (let r = 0; r < m; r++) { const { idx, val, h } = rows[r]; let s = h; for (let a = 0; a < idx.length; a++) s += val[a] * xv[idx[a]]; out[r] = s; } return out; };
+  const FTv = (vv, out) => { out.fill(0); for (let r = 0; r < m; r++) { const { idx, val } = rows[r]; for (let a = 0; a < idx.length; a++) out[idx[a]] += val[a] * vv[r]; } return out; };
+  const project = (s) => {
+    for (const b of blocks) {
+      if (b.type === 'zero') for (let i = 0; i < b.dim; i++) s[b.start + i] = 0;
+      else if (b.type === 'box') s[b.start] = Math.min(b.hi, Math.max(b.lo, s[b.start]));
+      else projCone(s, b.start, b.dim, b.ax, b.tanA);
+    }
+  };
+  const st = new Float64Array(m); Fx(x, st); z.set(st); project(z);
+  const rhs = new Float64Array(n), sv = new Float64Array(m), zprev = new Float64Array(m), tmp = new Float64Array(m);
+  const dz = new Float64Array(m), ftv = new Float64Array(n), fty = new Float64Array(n);
+  const hist = []; let it = 0, rp = Infinity, rd = Infinity, refactors = 0;
+  const maxIt = p.maxIt || 6000;
+  for (it = 1; it <= maxIt; it++) {
+    for (let i = 0; i < n; i++) rhs[i] = sig * x[i] - c[i];
+    for (let r = 0; r < m; r++) {
+      const { idx, val, h } = rows[r]; const w = R[r] * (z[r] - h) - y[r];
+      for (let a = 0; a < idx.length; a++) rhs[idx[a]] += val[a] * w;
+    }
+    cholSolve(L, n, rhs, x);
+    Fx(x, sv);
+    zprev.set(z);
+    for (let r = 0; r < m; r++) tmp[r] = alpha * sv[r] + (1 - alpha) * zprev[r] + y[r] / R[r];
+    project(tmp);
+    z.set(tmp);
+    for (let r = 0; r < m; r++) y[r] += R[r] * (alpha * sv[r] + (1 - alpha) * zprev[r] - z[r]);
+    if (it % 10 === 0) {
+      rp = 0; let sInf = 0, zInf = 0;
+      for (let r = 0; r < m; r++) { rp = Math.max(rp, Math.abs(sv[r] - z[r])); sInf = Math.max(sInf, Math.abs(sv[r])); zInf = Math.max(zInf, Math.abs(z[r])); }
+      for (let r = 0; r < m; r++) dz[r] = R[r] * (z[r] - zprev[r]);
+      FTv(dz, ftv); rd = 0; for (let i = 0; i < n; i++) rd = Math.max(rd, Math.abs(ftv[i]));
+      if (it % 20 === 0) hist.push([it, rp, rd]);
+      if (rp < 2e-5 && rd < 2e-5) break;
+      if (it % 50 === 0) {
+        FTv(y, fty); let yInf = 0; for (let i = 0; i < n; i++) yInf = Math.max(yInf, Math.abs(fty[i]));
+        const rpn = rp / Math.max(1e-9, sInf, zInf), rdn = rd / Math.max(1e-9, yInf, cInf);
+        const ratio = Math.sqrt(rpn / Math.max(1e-12, rdn));
+        if (ratio > 4 || ratio < 0.25) { rho0 = Math.min(1e5, Math.max(1e-5, rho0 * ratio)); factor(); refactors++; }
+      }
+    }
+  }
+  // unpack
+  const a = [], sigma = [], r = [], v = [];
+  for (let k = 0; k < N; k++) { a.push([x[3 * k], x[3 * k + 1], x[3 * k + 2]]); sigma.push(x[3 * N + k]); }
+  let rk = p.r0.slice(), vk = p.v0.slice();
+  r.push(rk.slice()); v.push(vk.slice());
+  for (let k = 0; k < N; k++) {
+    for (let d = 0; d < 3; d++) { rk[d] += vk[d] * dt + 0.5 * (a[k][d] + g[d]) * dt * dt; vk[d] += (a[k][d] + g[d]) * dt; }
+    r.push(rk.slice()); v.push(vk.slice());
+  }
+  let fuel = 0; for (let k = 0; k < N; k++) fuel += sigma[k] * dt;
+  const term = Math.hypot(...r[N]) + Math.hypot(...v[N]);
+  const feasible = rp < 5e-4 && term < 5e-3;
+  return { tf: p.tf, N, dt, a, sigma, r, v, fuel, iters: Math.min(it, maxIt), primal: rp, dual: rd, hist, feasible, x: Array.from(x), terminalError: term, refactors, rho: rho0 };
+}
+
+// Scaled wrapper with free-final-time golden search.
+// Real units: r0,v0 m, m/s; vehicle {mass, Tmax, Tmin, isp}; limits {glideDeg, pointDeg}
+function planLanding(req) {
+  const L = req.L || Math.max(400, Math.hypot(...req.r0));
+  const G = req.g || 9.81, T = Math.sqrt(L / G), V = L / T, A = L / (T * T);
+  const N = req.N || 30;
+  const r0 = req.r0.map(q => q / L), v0 = req.v0.map(q => q / V);
+  const tanGlide = Math.tan(req.glideDeg * Math.PI / 180), tanPoint = Math.tan(req.pointDeg * Math.PI / 180);
+  const g0 = 9.80665;
+  const bounds = (tf, prev) => {
+    // mass profile from previous solution (successive approximation), else linear guess
+    const amin = [], amax = []; let mk = req.mass; const dt = tf / N * T;
+    for (let k = 0; k < N; k++) {
+      amin.push(req.Tmin / mk / A); amax.push(req.Tmax / mk / A);
+      const acc = prev ? prev.sigma[k] * A : 0.6 * req.Tmax / req.mass;
+      mk = Math.max(req.dry, mk - dt * mk * acc / (req.isp * g0));
+    }
+    return { amin, amax };
+  };
+  const solveAt = (tfReal, warm) => {
+    const tf = tfReal / T;
+    let b = bounds(tf, null), sol = null;
+    for (let pass = 0; pass < 2; pass++) {
+      sol = solveLanding({ r0, v0, tf, N, amin: b.amin, amax: b.amax, tanGlide, tanPoint, warm: warm || (sol && { x: sol.x }), maxIt: req.maxIt || 2500 });
+      if (!sol.feasible) break;
+      b = bounds(tf, sol);
+    }
+    return sol;
+  };
+  const evals = [];
+  let best = null;
+  const cost = (tfReal) => {
+    const s = solveAt(tfReal, best && best.sol && { x: best.sol.x });
+    s._tf = tfReal;
+    const score = s.feasible ? s.fuel : 1e3 + s.primal * 1e3 + s.terminalError * 10;
+    evals.push({ tf: tfReal, fuel: s.feasible ? req.mass * (1 - Math.exp(-s.fuel * V / (req.isp * g0))) : null, feasible: s.feasible, iters: s.iters });
+    if (req.onEval) req.onEval(evals[evals.length - 1]);
+    if (s.feasible && (!best || s.fuel < best.sol.fuel)) best = { tf: tfReal, sol: s };
+    return score;
+  };
+  let tfFixed = req.tfFixed;
+  if (tfFixed) { cost(tfFixed); }
+  else {
+    // rough time-to-land estimate brackets the search
+    const h = Math.max(1, req.r0[1]), vy = -req.v0[1];
+    let est = 2 * h / Math.max(vy, 20);
+    est = Math.max(est, Math.sqrt(Math.hypot(req.r0[0], req.r0[2])) * 1.5, 4);
+    let lo = req.tfLo || Math.max(1.5, est * 0.5), hi = req.tfHi || est * 2.0;
+    // coarse scan then golden-section refine
+    const scan = [];
+    for (let i = 0; i <= 6; i++) { const t = lo + (hi - lo) * i / 6; scan.push([t, cost(t)]); }
+    let bi = 0; for (let i = 1; i < scan.length; i++) if (scan[i][1] < scan[bi][1]) bi = i;
+    let a = scan[Math.max(0, bi - 1)][0], b = scan[Math.min(6, bi + 1)][0];
+    const gr = 0.6180339887;
+    let c1 = b - gr * (b - a), c2 = a + gr * (b - a), f1 = cost(c1), f2 = cost(c2);
+    for (let i = 0; i < 9; i++) {
+      if (f1 < f2) { b = c2; c2 = c1; f2 = f1; c1 = b - gr * (b - a); f1 = cost(c1); }
+      else { a = c1; c1 = c2; f1 = f2; c2 = a + gr * (b - a); f2 = cost(c2); }
+    }
+  }
+  if (!best) {
+    const last = evals[evals.length - 1];
+    return { feasible: false, evals };
+  }
+  const s = best.sol;
+  const plan = {
+    feasible: true, tf: best.tf, N, dt: s.dt * T,
+    r: s.r.map(q => q.map(e => e * L)), v: s.v.map(q => q.map(e => e * V)),
+    a: s.a.map(q => q.map(e => e * A)), sigma: s.sigma.map(e => e * A),
+    iters: s.iters, primal: s.primal, hist: s.hist, evals,
+    fuelKg: req.mass * (1 - Math.exp(-s.fuel * V / (req.isp * g0))), dv: s.fuel * V, warm: s.x, L,
+  };
+  return plan;
+}
+if (typeof module !== 'undefined') module.exports = { solveLanding, planLanding };
+</script>
+<script type="text/plain" id="sim-src">// Flight dynamics + guidance tracking. Shared by the page and the headless test.
+const G0 = 9.80665, GRAV = 9.81;
+const VEHICLE = { mass: 30000, dry: 24000, Tmax: 450e3, Tmin: 180e3, isp: 282, area: 3.7 * 40 };
+const WORLDS = { earth: { g: 9.81, rho: 1.225 }, mars: { g: 3.71, rho: 0.020 }, moon: { g: 1.62, rho: 0 } };
+function makeSim(cfg) {
+  return {
+    veh: Object.assign({}, cfg.vehicle || VEHICLE), g: (WORLDS[cfg.world] || WORLDS.earth).g, rho: (WORLDS[cfg.world] || WORLDS.earth).rho,
+    phase: 'idle', t: 0, r: [cfg.x, cfg.alt, cfg.z], v: [cfg.vx, cfg.vy, cfg.vz], m: (cfg.vehicle || VEHICLE).mass,
+    TmaxEff: (cfg.vehicle || VEHICLE).Tmax, T: [0, 0, 0], plan: null, planT0: 0, tEnd: 0, lastReplan: -9, replans: 0,
+    pending: false, mode: 'guided', faultDone: false, gust: [0, 0], trace: [], events: [], solveMs: 0, solveIters: 0,
+    result: null, rng: cfg.seed || 1,
+  };
+}
+function rand(sim) { sim.rng = (sim.rng * 16807) % 2147483647; return sim.rng / 2147483647; }
+function gauss(sim) { return Math.sqrt(-2 * Math.log(rand(sim) + 1e-12)) * Math.cos(2 * Math.PI * rand(sim)); }
+function guidanceRequest(sim, cfg, extra) {
+  return Object.assign({
+    r0: sim.r.slice(), v0: sim.v.slice(), mass: sim.m, dry: sim.veh.dry, Tmax: sim.TmaxEff * (extra && extra.tight ? 0.985 : sim.faultDone ? 0.95 : 0.86), Tmin: sim.veh.Tmin * (extra && extra.tight ? 1.02 : 1.08),
+    isp: sim.veh.isp, g: sim.g, glideDeg: cfg.glide, pointDeg: Math.max(5, cfg.point - 4), N: 30,
+  }, extra || {}, { tight: undefined });
+}
+// full search: with the usual thrust reserve first, then using almost all the thrust there is
+function searchRequests(sim, cfg) { return [guidanceRequest(sim, cfg), guidanceRequest(sim, cfg, { tight: true })]; }
+function searchPlan(sim, cfg, solve) { let p; for (const r of searchRequests(sim, cfg)) { p = solve(r); if (p.feasible) return p; } return p; }
+function acceptPlan(sim, plan, tReq) {
+  sim.plan = plan; sim.planT0 = tReq; sim.tEnd = tReq + plan.tf; sim.solveMs = plan.ms || 0; sim.solveIters = plan.iters;
+}
+// commanded thrust-acceleration (m/s^2) at current time
+function commandAccel(sim) {
+  const p = sim.plan, r = sim.r, v = sim.v;
+  const tau = sim.t - sim.planT0;
+  const terminal = !p || sim.mode === 'emergency' || tau > p.tf - 0.6 || r[1] < 2.0;
+  if (terminal) {
+    if (sim.mode === 'emergency') {
+      // no safe solution: brake as hard as needed to come down slowly, kill sideways speed
+      const vyT = -Math.max(1, Math.min(6, r[1] * 0.08));
+      return [-0.4 * v[0], sim.g + 2.0 * (vyT - v[1]), -0.4 * v[2]];
+    }
+    const vyT = -Math.max(0.7, Math.min(4, r[1] * 0.5));
+    return [-0.5 * r[0] - 2.0 * v[0], sim.g + 3.0 * (vyT - v[1]), -0.5 * r[2] - 2.0 * v[2]];
+  }
+  const k = Math.min(p.N - 1, Math.max(0, Math.floor(tau / p.dt)));
+  const s = Math.max(0, tau - k * p.dt), a = p.a[k];
+  const out = [0, 0, 0], g = [0, -sim.g, 0];
+  for (let d = 0; d < 3; d++) {
+    const rr = p.r[k][d] + p.v[k][d] * s + 0.5 * (a[d] + g[d]) * s * s;
+    const vr = p.v[k][d] + (a[d] + g[d]) * s;
+    out[d] = a[d] + 0.30 * (rr - r[d]) + 1.1 * (vr - v[d]);
+  }
+  return out;
+}
+function limitThrust(sim, cfg, acc) {
+  if (sim.m <= sim.veh.dry + 1) return [0, 0, 0];
+  let T = acc.map(q => q * sim.m);
+  if (T[1] < 1) T[1] = 1;
+  const h = Math.hypot(T[0], T[2]), maxTan = Math.tan(cfg.point * Math.PI / 180);
+  if (h > maxTan * T[1]) { const s = maxTan * T[1] / h; T[0] *= s; T[2] *= s; }
+  const mag = Math.hypot(...T), lo = sim.veh.Tmin, hi = sim.TmaxEff;
+  const target = Math.min(hi, Math.max(lo, mag));
+  return T.map(q => q * target / mag);
+}
+function step(sim, cfg, dt) {
+  if (sim.phase !== 'flight') return;
+  // wind: steady + Ornstein-Uhlenbeck gusts
+  const tauG = 3;
+  for (let i = 0; i < 2; i++) sim.gust[i] += (-sim.gust[i] / tauG) * dt + cfg.gust * Math.sqrt(2 * dt / tauG) * gauss(sim);
+  const dir = (cfg.windDir || 0) * Math.PI / 180;
+  const w = [cfg.wind * Math.cos(dir) + sim.gust[0], cfg.wind * Math.sin(dir) + sim.gust[1]];
+  const rel = [w[0] - sim.v[0], w[1] - sim.v[2]], relM = Math.hypot(...rel);
+  const kd = 0.5 * sim.rho * 0.8 * (sim.veh.area || 100) / sim.m;
+  sim.wind = w;
+  // engine fault
+  if (cfg.faultAlt > 0 && !sim.faultDone && sim.r[1] < cfg.faultAlt) {
+    sim.faultDone = true; sim.TmaxEff = sim.veh.Tmax * cfg.faultLevel; sim.needSearch = true;
+    sim.events.push({ t: sim.t, kind: 'fault', text: `Engine thrust dropped to ${Math.round(cfg.faultLevel * 100)}%` });
+  }
+  const acc = commandAccel(sim);
+  sim.T = limitThrust(sim, cfg, acc);
+  const Tm = Math.hypot(...sim.T);
+  const a = [sim.T[0] / sim.m + kd * relM * rel[0], sim.T[1] / sim.m - sim.g, sim.T[2] / sim.m + kd * relM * rel[1]];
+  for (let d = 0; d < 3; d++) { sim.v[d] += a[d] * dt; sim.r[d] += sim.v[d] * dt; }
+  sim.m = Math.max(sim.veh.dry, sim.m - Tm / (sim.veh.isp * G0) * dt);
+  sim.t += dt;
+  if (sim.r[1] <= 0) touchdown(sim);
+}
+function touchdown(sim) {
+  sim.r[1] = 0;
+  const vs = -sim.v[1], hs = Math.hypot(sim.v[0], sim.v[2]), miss = Math.hypot(sim.r[0], sim.r[2]);
+  let result, ok = false;
+  if (vs > 8 || hs > 4) result = 'Vehicle lost on impact';
+  else if (miss > 25) result = 'Landed off the pad';
+  else if (vs > 3 || hs > 1.5) result = 'Hard landing';
+  else { result = 'Landed on the pad'; ok = true; }
+  sim.result = { text: result, ok, vs, hs, miss, fuel: sim.veh.mass - sim.m, t: sim.t };
+  sim.phase = ok ? 'landed' : 'crashed';
+  sim.T = [0, 0, 0]; sim.v = [0, 0, 0];
+}
+// Re-plan policy: keep the landing time, else slip it later a little, else full free-time search.
+function replanSequence(sim, cfg, solve) {
+  const rem = sim.tEnd - sim.t;
+  for (const slip of [0, 1.5, 3.5]) {
+    const q = solve(guidanceRequest(sim, cfg, { tfFixed: rem + slip }));
+    if (q.feasible) return q;
+  }
+  return null;
+}
+// One complete flight with no graphics: used by the batch reliability test (runs in a worker).
+function flyHeadless(cfg, solve) {
+  const sim = makeSim(cfg); const p0 = searchPlan(sim, cfg, solve);
+  if (!p0.feasible) sim.mode = 'emergency'; else acceptPlan(sim, p0, 0);
+  sim.phase = 'flight';
+  while (sim.phase === 'flight' && sim.t < 600) {
+    if (sim.needSearch) { sim.needSearch = false; const q = searchPlan(sim, cfg, solve); if (q.feasible) { acceptPlan(sim, q, sim.t); sim.replans++; } else sim.mode = 'emergency'; }
+    else if (sim.mode === 'guided' && sim.t - sim.lastReplan >= 1.5 && sim.tEnd - sim.t > 3) {
+      sim.lastReplan = sim.t; const q = replanSequence(sim, cfg, solve);
+      if (q) { acceptPlan(sim, q, sim.t); sim.replans++; } else if (!sim.lastSearch || sim.t - sim.lastSearch > 6) { sim.lastSearch = sim.t; const q2 = searchPlan(sim, cfg, solve); if (q2.feasible) { acceptPlan(sim, q2, sim.t); sim.replans++; } }
+    }
+    step(sim, cfg, 1 / 60);
+  }
+  const r = sim.result || { text: 'Did not land', ok: false, vs: 0, hs: 0, miss: 0, fuel: sim.veh.mass - sim.m, t: sim.t };
+  return { ok: r.ok, text: r.text, vs: r.vs, hs: r.hs, miss: r.miss, x: sim.r[0], z: sim.r[2], fuel: r.fuel, t: r.t, replans: sim.replans, planned: !!p0.feasible, fault: sim.faultDone, emergency: sim.mode === 'emergency', wind: cfg.wind };
+}
+if (typeof module !== 'undefined') module.exports = { searchPlan, searchRequests, flyHeadless, VEHICLE, WORLDS, makeSim, step, guidanceRequest, acceptPlan, commandAccel, replanSequence };
+</script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script>
+<script>
+// Flight dynamics + guidance tracking. Shared by the page and the headless test.
+const G0 = 9.80665, GRAV = 9.81;
+const VEHICLE = { mass: 30000, dry: 24000, Tmax: 450e3, Tmin: 180e3, isp: 282, area: 3.7 * 40 };
+const WORLDS = { earth: { g: 9.81, rho: 1.225 }, mars: { g: 3.71, rho: 0.020 }, moon: { g: 1.62, rho: 0 } };
+function makeSim(cfg) {
+  return {
+    veh: Object.assign({}, cfg.vehicle || VEHICLE), g: (WORLDS[cfg.world] || WORLDS.earth).g, rho: (WORLDS[cfg.world] || WORLDS.earth).rho,
+    phase: 'idle', t: 0, r: [cfg.x, cfg.alt, cfg.z], v: [cfg.vx, cfg.vy, cfg.vz], m: (cfg.vehicle || VEHICLE).mass,
+    TmaxEff: (cfg.vehicle || VEHICLE).Tmax, T: [0, 0, 0], plan: null, planT0: 0, tEnd: 0, lastReplan: -9, replans: 0,
+    pending: false, mode: 'guided', faultDone: false, gust: [0, 0], trace: [], events: [], solveMs: 0, solveIters: 0,
+    result: null, rng: cfg.seed || 1,
+  };
+}
+function rand(sim) { sim.rng = (sim.rng * 16807) % 2147483647; return sim.rng / 2147483647; }
+function gauss(sim) { return Math.sqrt(-2 * Math.log(rand(sim) + 1e-12)) * Math.cos(2 * Math.PI * rand(sim)); }
+function guidanceRequest(sim, cfg, extra) {
+  return Object.assign({
+    r0: sim.r.slice(), v0: sim.v.slice(), mass: sim.m, dry: sim.veh.dry, Tmax: sim.TmaxEff * (extra && extra.tight ? 0.985 : sim.faultDone ? 0.95 : 0.86), Tmin: sim.veh.Tmin * (extra && extra.tight ? 1.02 : 1.08),
+    isp: sim.veh.isp, g: sim.g, glideDeg: cfg.glide, pointDeg: Math.max(5, cfg.point - 4), N: 30,
+  }, extra || {}, { tight: undefined });
+}
+// full search: with the usual thrust reserve first, then using almost all the thrust there is
+function searchRequests(sim, cfg) { return [guidanceRequest(sim, cfg), guidanceRequest(sim, cfg, { tight: true })]; }
+function searchPlan(sim, cfg, solve) { let p; for (const r of searchRequests(sim, cfg)) { p = solve(r); if (p.feasible) return p; } return p; }
+function acceptPlan(sim, plan, tReq) {
+  sim.plan = plan; sim.planT0 = tReq; sim.tEnd = tReq + plan.tf; sim.solveMs = plan.ms || 0; sim.solveIters = plan.iters;
+}
+// commanded thrust-acceleration (m/s^2) at current time
+function commandAccel(sim) {
+  const p = sim.plan, r = sim.r, v = sim.v;
+  const tau = sim.t - sim.planT0;
+  const terminal = !p || sim.mode === 'emergency' || tau > p.tf - 0.6 || r[1] < 2.0;
+  if (terminal) {
+    if (sim.mode === 'emergency') {
+      // no safe solution: brake as hard as needed to come down slowly, kill sideways speed
+      const vyT = -Math.max(1, Math.min(6, r[1] * 0.08));
+      return [-0.4 * v[0], sim.g + 2.0 * (vyT - v[1]), -0.4 * v[2]];
+    }
+    const vyT = -Math.max(0.7, Math.min(4, r[1] * 0.5));
+    return [-0.5 * r[0] - 2.0 * v[0], sim.g + 3.0 * (vyT - v[1]), -0.5 * r[2] - 2.0 * v[2]];
+  }
+  const k = Math.min(p.N - 1, Math.max(0, Math.floor(tau / p.dt)));
+  const s = Math.max(0, tau - k * p.dt), a = p.a[k];
+  const out = [0, 0, 0], g = [0, -sim.g, 0];
+  for (let d = 0; d < 3; d++) {
+    const rr = p.r[k][d] + p.v[k][d] * s + 0.5 * (a[d] + g[d]) * s * s;
+    const vr = p.v[k][d] + (a[d] + g[d]) * s;
+    out[d] = a[d] + 0.30 * (rr - r[d]) + 1.1 * (vr - v[d]);
+  }
+  return out;
+}
+function limitThrust(sim, cfg, acc) {
+  if (sim.m <= sim.veh.dry + 1) return [0, 0, 0];
+  let T = acc.map(q => q * sim.m);
+  if (T[1] < 1) T[1] = 1;
+  const h = Math.hypot(T[0], T[2]), maxTan = Math.tan(cfg.point * Math.PI / 180);
+  if (h > maxTan * T[1]) { const s = maxTan * T[1] / h; T[0] *= s; T[2] *= s; }
+  const mag = Math.hypot(...T), lo = sim.veh.Tmin, hi = sim.TmaxEff;
+  const target = Math.min(hi, Math.max(lo, mag));
+  return T.map(q => q * target / mag);
+}
+function step(sim, cfg, dt) {
+  if (sim.phase !== 'flight') return;
+  // wind: steady + Ornstein-Uhlenbeck gusts
+  const tauG = 3;
+  for (let i = 0; i < 2; i++) sim.gust[i] += (-sim.gust[i] / tauG) * dt + cfg.gust * Math.sqrt(2 * dt / tauG) * gauss(sim);
+  const dir = (cfg.windDir || 0) * Math.PI / 180;
+  const w = [cfg.wind * Math.cos(dir) + sim.gust[0], cfg.wind * Math.sin(dir) + sim.gust[1]];
+  const rel = [w[0] - sim.v[0], w[1] - sim.v[2]], relM = Math.hypot(...rel);
+  const kd = 0.5 * sim.rho * 0.8 * (sim.veh.area || 100) / sim.m;
+  sim.wind = w;
+  // engine fault
+  if (cfg.faultAlt > 0 && !sim.faultDone && sim.r[1] < cfg.faultAlt) {
+    sim.faultDone = true; sim.TmaxEff = sim.veh.Tmax * cfg.faultLevel; sim.needSearch = true;
+    sim.events.push({ t: sim.t, kind: 'fault', text: `Engine thrust dropped to ${Math.round(cfg.faultLevel * 100)}%` });
+  }
+  const acc = commandAccel(sim);
+  sim.T = limitThrust(sim, cfg, acc);
+  const Tm = Math.hypot(...sim.T);
+  const a = [sim.T[0] / sim.m + kd * relM * rel[0], sim.T[1] / sim.m - sim.g, sim.T[2] / sim.m + kd * relM * rel[1]];
+  for (let d = 0; d < 3; d++) { sim.v[d] += a[d] * dt; sim.r[d] += sim.v[d] * dt; }
+  sim.m = Math.max(sim.veh.dry, sim.m - Tm / (sim.veh.isp * G0) * dt);
+  sim.t += dt;
+  if (sim.r[1] <= 0) touchdown(sim);
+}
+function touchdown(sim) {
+  sim.r[1] = 0;
+  const vs = -sim.v[1], hs = Math.hypot(sim.v[0], sim.v[2]), miss = Math.hypot(sim.r[0], sim.r[2]);
+  let result, ok = false;
+  if (vs > 8 || hs > 4) result = 'Vehicle lost on impact';
+  else if (miss > 25) result = 'Landed off the pad';
+  else if (vs > 3 || hs > 1.5) result = 'Hard landing';
+  else { result = 'Landed on the pad'; ok = true; }
+  sim.result = { text: result, ok, vs, hs, miss, fuel: sim.veh.mass - sim.m, t: sim.t };
+  sim.phase = ok ? 'landed' : 'crashed';
+  sim.T = [0, 0, 0]; sim.v = [0, 0, 0];
+}
+// Re-plan policy: keep the landing time, else slip it later a little, else full free-time search.
+function replanSequence(sim, cfg, solve) {
+  const rem = sim.tEnd - sim.t;
+  for (const slip of [0, 1.5, 3.5]) {
+    const q = solve(guidanceRequest(sim, cfg, { tfFixed: rem + slip }));
+    if (q.feasible) return q;
+  }
+  return null;
+}
+// One complete flight with no graphics: used by the batch reliability test (runs in a worker).
+function flyHeadless(cfg, solve) {
+  const sim = makeSim(cfg); const p0 = searchPlan(sim, cfg, solve);
+  if (!p0.feasible) sim.mode = 'emergency'; else acceptPlan(sim, p0, 0);
+  sim.phase = 'flight';
+  while (sim.phase === 'flight' && sim.t < 600) {
+    if (sim.needSearch) { sim.needSearch = false; const q = searchPlan(sim, cfg, solve); if (q.feasible) { acceptPlan(sim, q, sim.t); sim.replans++; } else sim.mode = 'emergency'; }
+    else if (sim.mode === 'guided' && sim.t - sim.lastReplan >= 1.5 && sim.tEnd - sim.t > 3) {
+      sim.lastReplan = sim.t; const q = replanSequence(sim, cfg, solve);
+      if (q) { acceptPlan(sim, q, sim.t); sim.replans++; } else if (!sim.lastSearch || sim.t - sim.lastSearch > 6) { sim.lastSearch = sim.t; const q2 = searchPlan(sim, cfg, solve); if (q2.feasible) { acceptPlan(sim, q2, sim.t); sim.replans++; } }
+    }
+    step(sim, cfg, 1 / 60);
+  }
+  const r = sim.result || { text: 'Did not land', ok: false, vs: 0, hs: 0, miss: 0, fuel: sim.veh.mass - sim.m, t: sim.t };
+  return { ok: r.ok, text: r.text, vs: r.vs, hs: r.hs, miss: r.miss, x: sim.r[0], z: sim.r[2], fuel: r.fuel, t: r.t, replans: sim.replans, planned: !!p0.feasible, fault: sim.faultDone, emergency: sim.mode === 'emergency', wind: cfg.wind };
+}
+if (typeof module !== 'undefined') module.exports = { searchPlan, searchRequests, flyHeadless, VEHICLE, WORLDS, makeSim, step, guidanceRequest, acceptPlan, commandAccel, replanSequence };
+
+</script>
+<script>
+{
+const $ = s => document.querySelector(s);
+const fmt = (n, d = 0) => Number(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+const store = { get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} } };
+
+// ---------- scenarios ----------
+const VEHICLES = {
+  booster: { name: 'Orbital booster', mass: 30000, dry: 24000, Tmax: 450e3, Tmin: 180e3, isp: 282, area: 148 },
+  hopper: { name: 'Test hopper', mass: 1800, dry: 1300, Tmax: 30000, Tmin: 10000, isp: 240, area: 8 },
+  mars: { name: 'Mars lander', mass: 1900, dry: 1500, Tmax: 16000, Tmin: 4000, isp: 225, area: 12 },
+  lunar: { name: 'Lunar lander', mass: 15000, dry: 7000, Tmax: 45000, Tmin: 4700, isp: 311, area: 40 },
+};
+const LOOKS = { booster: { scale: 1, color: 0xf2f0ec }, hopper: { scale: 0.3, color: 0xdfe4ea }, mars: { scale: 0.22, color: 0xece6da }, lunar: { scale: 0.3, color: 0xd8b25a } };
+const WORLD_NAMES = { earth: 'Earth', mars: 'Mars', moon: 'Moon' };
+const PRESETS = [
+  { id: 'nominal', name: 'Routine return', desc: 'Coming in high and fast, a few hundred metres off the pad.', cfg: { alt: 1500, x: 350, z: -120, vx: -25, vy: -90, vz: 10, wind: 3, gust: 1, windDir: 30, faultAlt: 0, faultLevel: 1, glide: 20, point: 30, veh: 'booster', world: 'earth' } },
+  { id: 'wind', name: 'Gusty crosswind', desc: '14 m/s wind with strong gusts pushing it sideways all the way down.', cfg: { alt: 1500, x: 350, z: -120, vx: -25, vy: -90, vz: 10, wind: 14, gust: 4, windDir: 110, faultAlt: 0, faultLevel: 1, glide: 20, point: 30, veh: 'booster', world: 'earth' } },
+  { id: 'fault', name: 'Engine fault', desc: 'At 2,000 m the engine loses 15% of its thrust. The plan has to be rebuilt mid-air.', cfg: { alt: 2400, x: 300, z: -120, vx: -25, vy: -85, vz: 10, wind: 4, gust: 1.5, windDir: 60, faultAlt: 2000, faultLevel: 0.85, glide: 20, point: 30, veh: 'booster', world: 'earth' } },
+  { id: 'divert', name: 'Long divert', desc: 'Starts a kilometre away and has to cover the distance without breaking the glide slope.', cfg: { alt: 1800, x: 900, z: 400, vx: -40, vy: -80, vz: 0, wind: 3, gust: 1, windDir: 200, faultAlt: 0, faultLevel: 1, glide: 20, point: 30, veh: 'booster', world: 'earth' } },
+  { id: 'hop', name: 'Test hopper', desc: 'A small test vehicle hops 400 m up and comes back down onto the pad in a breeze.', cfg: { alt: 400, x: 60, z: -30, vx: -6, vy: -25, vz: 2, wind: 4, gust: 1, windDir: 80, faultAlt: 0, faultLevel: 1, glide: 20, point: 30, veh: 'hopper', world: 'earth' } },
+  { id: 'mars', name: 'Mars touchdown', desc: 'A one-tonne lander in a third of Earth gravity and air too thin to slow it down.', cfg: { alt: 1500, x: 300, z: 100, vx: -20, vy: -75, vz: 0, wind: 8, gust: 2, windDir: 250, faultAlt: 0, faultLevel: 1, glide: 20, point: 30, veh: 'mars', world: 'mars' } },
+  { id: 'moon', name: 'Lunar landing', desc: 'No air, one-sixth gravity, and 800 m to cover sideways before it reaches the pad.', cfg: { alt: 2000, x: 800, z: -200, vx: -30, vy: -40, vz: 5, wind: 0, gust: 0, windDir: 0, faultAlt: 0, faultLevel: 1, glide: 10, point: 45, veh: 'lunar', world: 'moon' } },
+  { id: 'late', name: 'Too late to stop', desc: 'Only 450 m up at 110 m/s. No thrust profile can stop it, and the planner should say so.', cfg: { alt: 450, x: 60, z: 0, vx: -5, vy: -110, vz: 0, wind: 2, gust: 1, windDir: 0, faultAlt: 0, faultLevel: 1, glide: 20, point: 30, veh: 'booster', world: 'earth' } },
+];
+const FIELDS = [
+  ['alt', 'Start altitude (m)', 200, 4000, 10], ['x', 'Downrange offset (m)', -1500, 1500, 10], ['z', 'Crossrange offset (m)', -1500, 1500, 10],
+  ['vx', 'Downrange speed', -80, 80, 1], ['vy', 'Vertical speed', -150, 0, 1], ['vz', 'Crossrange speed', -80, 80, 1],
+  ['wind', 'Wind (m/s)', 0, 25, 0.5], ['gust', 'Gust strength (m/s)', 0, 8, 0.5], ['windDir', 'Wind from (deg)', 0, 359, 1],
+  ['faultAlt', 'Engine fault at altitude (m, 0 = none)', 0, 4000, 10], ['faultLevel', 'Thrust after fault (0–1)', 0.5, 1, 0.01],
+  ['glide', 'Glide-slope angle (deg)', 5, 60, 1], ['point', 'Max engine tilt (deg)', 10, 45, 1],
+];
+function withVehicle(c) { c = Object.assign({}, c); if (!VEHICLES[c.veh]) c.veh = 'booster'; if (!WORLD_NAMES[c.world]) c.world = 'earth'; if (!c.vehicle) c.vehicle = Object.assign({}, VEHICLES[c.veh]); return c; }
+PRESETS.forEach(p => p.cfg = withVehicle(p.cfg));
+let scen = store.get('rls.scen', { id: 'nominal', cfg: PRESETS[0].cfg });
+let cfg = withVehicle(scen.cfg); scen.cfg = cfg;
+const scenName = () => (PRESETS.find(p => p.id === scen.id) || { name: 'Custom flight' }).name;
+const vehName = c => (c || cfg).vehicle.name || 'Custom vehicle';
+const clone = o => JSON.parse(JSON.stringify(o));
+
+// ---------- worker ----------
+const wsrc = document.getElementById('solver-src').textContent + `
+onmessage = e => {
+  const { id, reqs, search } = e.data; const t0 = performance.now();
+  if (search) { let p; for (const s of [].concat(search)) { s.onEval = ev => postMessage({ id, progress: ev }); p = planLanding(s); delete s.onEval; if (p.feasible) break; } p.ms = performance.now() - t0; postMessage({ id, plan: p, kind: 'search' }); return; }
+  for (const r of reqs) { const p = planLanding(r); if (p.feasible) { p.ms = performance.now() - t0; postMessage({ id, plan: p, kind: 'replan' }); return; } }
+  postMessage({ id, plan: null, kind: 'replan' });
+};`;
+const worker = new Worker(URL.createObjectURL(new Blob([wsrc], { type: 'text/javascript' })));
+let jobId = 0; const jobs = {};
+worker.onmessage = e => { const j = jobs[e.data.id]; if (!j) return; if (e.data.progress) { j.onProgress && j.onProgress(e.data.progress); return; } delete jobs[e.data.id]; j.done(e.data.plan); };
+const runJob = (msg, done, onProgress) => { const id = ++jobId; jobs[id] = { done, onProgress }; worker.postMessage(Object.assign({ id }, msg)); return id; };
+
+// ---------- sim state ----------
+let sim = makeSim(cfg), speed = 1, paused = false, flightId = 0, initialSearch = [];
+const flown = []; // {t, alt, acc, amin, amax}
+let lastPlanHist = [], planHistory = [];
+function feed(text, kind) { sim.events.push({ t: sim.t, text, kind }); renderFeed(); }
+function renderFeed() { $('#feed').innerHTML = sim.events.slice(-7).reverse().map(e => `<li class="${e.kind || ''}"><time>T+${e.t.toFixed(1)}</time><span>${e.text}</span></li>`).join(''); }
+function resetSim() {
+  flightId++; sim = makeSim(cfg); flown.length = 0; planHistory = []; lastPlanHist = []; initialSearch = [];
+  paused = false; trailPts.length = 0; updateLine(trail, []); updateLine(planLine, []);
+  $('#banner').classList.remove('show'); setPhase('Ready on the range', false); renderFeed(); legs.forEach(l => l.rotation.z = 0); deploy = 0;
+  $('#launch').textContent = 'Start descent'; $('#launch').disabled = false; $('#pause').disabled = true; $('#kick').disabled = true; $('#scenName').textContent = `${scenName()} · ${vehName()} · ${WORLD_NAMES[cfg.world]}`; applyLook();
+  sampleT = 0; placeRocket(); hud(true);
+}
+function setPhase(t, live) { $('#phase').textContent = t; $('#dot').classList.toggle('live', !!live); }
+function banner(html) { const b = $('#banner'); b.innerHTML = html; b.classList.add('show'); }
+
+function startFlight() {
+  resetSim(); const fid = flightId; sim.phase = 'planning'; setPhase('Solving for the fuel-optimal path', true);
+  $('#launch').disabled = true; $('#launch').textContent = 'Solving…';
+  banner(`<h2>Computing the landing</h2><p>Searching flight times for the cheapest safe trajectory</p><div class="solving" id="solv">${'<i></i>'.repeat(18)}</div>`);
+  let n = 0;
+  runJob({ search: searchRequests(sim, cfg) }, plan => {
+    if (fid !== flightId) return;
+    $('#banner').classList.remove('show');
+    if (plan && plan.feasible) {
+      acceptPlan(sim, plan, 0); initialSearch = plan.evals; lastPlanHist = plan.hist; snapshotPlan();
+      feed(`Plan found: land in ${plan.tf.toFixed(1)} s using about ${fmt(plan.fuelKg)} kg of propellant`);
+    } else {
+      initialSearch = plan ? plan.evals : []; sim.mode = 'emergency';
+      feed('No safe trajectory exists from this state. Braking as hard as it can.', 'fault');
+    }
+    sim.phase = 'flight'; setPhase(sim.mode === 'emergency' ? 'No safe solution: emergency braking' : 'Powered descent', true);
+    $('#launch').textContent = 'Restart'; $('#launch').disabled = false; $('#pause').disabled = false; $('#kick').disabled = false;
+  }, ev => { const i = document.querySelectorAll('#solv i')[n++ % 18]; if (i) i.className = ev.feasible ? 'ok' : 'x'; });
+}
+function snapshotPlan() { if (sim.plan) planHistory.push({ t0: sim.planT0, plan: sim.plan }); }
+function guidanceTick() {
+  if (sim.phase !== 'flight' || sim.pending || sim.mode !== 'guided') return;
+  const fid = flightId;
+  if (sim.needSearch) {
+    sim.needSearch = false; sim.pending = true; const tReq = sim.t;
+    if (sim.faultDone && !sim.faultHandled) { sim.faultHandled = true; feed(sim.events.filter(e => e.kind === 'fault').length ? 'Engine fault. Rebuilding the whole plan.' : 'Rebuilding the whole plan.', 'fault'); }
+    else feed('Re-searching the landing time');
+    runJob({ search: searchRequests(sim, cfg) }, plan => {
+      if (fid !== flightId) return; sim.pending = false;
+      if (plan && plan.feasible) { acceptPlan(sim, plan, tReq); sim.replans++; lastPlanHist = plan.hist; snapshotPlan(); feed(`New plan: touchdown in ${plan.tf.toFixed(1)} s`); }
+      else { sim.mode = 'emergency'; feed('No safe landing remains after the fault. Braking as hard as it can.', 'fault'); setPhase('No safe solution: emergency braking', true); }
+    });
+    return;
+  }
+  const rem = sim.tEnd - sim.t;
+  if (sim.t - sim.lastReplan < 1 || rem < 3) return;
+  sim.lastReplan = sim.t; sim.pending = true; const tReq = sim.t;
+  const reqs = [0, 1.5, 3.5].map(s => guidanceRequest(sim, cfg, { tfFixed: rem + s }));
+  runJob({ reqs }, plan => {
+    if (fid !== flightId) return; sim.pending = false;
+    if (plan) {
+      const slipped = sim.planT0 + sim.plan.tf; acceptPlan(sim, plan, tReq); sim.replans++; lastPlanHist = plan.hist; snapshotPlan();
+      const d = sim.tEnd - slipped; if (d > 0.5) feed(`Touchdown slipped ${d.toFixed(1)} s to stay safe`);
+    } else { sim.needSearch = true; sim.events.push({ t: sim.t, text: 'Fixed-time plan infeasible, searching again' }); renderFeed(); }
+  });
+}
+
+// ---------- three.js scene ----------
+const canvas = $('#gl'), stageEl = $('#stage');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(2, devicePixelRatio)); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputEncoding = THREE.sRGBEncoding; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, 1, 0.5, 30000);
+function grad(stops, w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d'); const gr = g.createLinearGradient(0, 0, 0, h); stops.forEach(([o, col]) => gr.addColorStop(o, col)); g.fillStyle = gr; g.fillRect(0, 0, w, h); return c; }
+const WORLD_LOOK = {
+  earth: { sky: [[0, '#5f7ea3'], [0.45, '#a9b9c9'], [0.78, '#f0c9a0'], [1, '#f7d9b4']], fog: [0xe8cfae, 1800, 9000], ground: '#cfae84', speck: ['255,236,205', '120,86,52'], mesa: 0xb9805a, hemi: [0xdbe6f2, 0x9c7a55, 0.75], sun: [0xffe2bf, 1.25], stage: '#cfb28d', dust: 0xe9dcc8 },
+  mars: { sky: [[0, '#5a3b2a'], [0.45, '#a8714b'], [0.8, '#dcae80'], [1, '#e9c39a']], fog: [0xd6a173, 1200, 7000], ground: '#b4673d', speck: ['236,170,120', '86,38,18'], mesa: 0x8a4226, hemi: [0xf3d3b1, 0x7c3a1e, 0.7], sun: [0xffe9d0, 1.05], stage: '#a8714b', dust: 0xd9a47a },
+  moon: { sky: null, fog: [0x000000, 9000, 40000], ground: '#76746f', speck: ['220,220,214', '30,30,30'], mesa: 0x5d5b57, hemi: [0x9aa2ad, 0x1e1e1e, 0.2], sun: [0xffffff, 1.45], stage: '#111', dust: 0xcfcfcb, craters: true },
+};
+function starTex() { const c = document.createElement('canvas'); c.width = 1024; c.height = 512; const g = c.getContext('2d'); g.fillStyle = '#020203'; g.fillRect(0, 0, 1024, 512); for (let i = 0; i < 700; i++) { const b = Math.random(); g.fillStyle = `rgba(255,255,255,${0.25 + b * 0.75})`; g.fillRect(Math.random() * 1024, Math.random() * 440, b > 0.93 ? 2 : 1, b > 0.93 ? 2 : 1); } const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; return t; }
+const skyTexs = {};
+scene.fog = new THREE.Fog(0xe8cfae, 1800, 9000);
+const hemi = new THREE.HemisphereLight(0xdbe6f2, 0x9c7a55, 0.75); scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xffe2bf, 1.25); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -60, right: 60, top: 60, bottom: -60, near: 1, far: 600 }); scene.add(sun, sun.target);
+// ground
+const gc = document.createElement('canvas'); gc.width = gc.height = 256;
+function paintGround(L) { const g = gc.getContext('2d'); g.fillStyle = L.ground; g.fillRect(0, 0, 256, 256); for (let i = 0; i < 9000; i++) { const v = Math.random(); g.fillStyle = `rgba(${v > .5 ? L.speck[0] : L.speck[1]},${Math.random() * 0.09})`; g.fillRect(Math.random() * 256, Math.random() * 256, 2 + Math.random() * 3, 1 + Math.random() * 2); }
+  if (L.craters) for (let i = 0; i < 5; i++) { const x = Math.random() * 256, y = Math.random() * 256, r = 6 + Math.random() * 22; g.strokeStyle = 'rgba(30,30,30,.22)'; g.lineWidth = 2; g.beginPath(); g.arc(x, y, r, 0.3, 3.6); g.stroke(); g.strokeStyle = 'rgba(255,255,255,.16)'; g.beginPath(); g.arc(x, y, r, 3.6, 6.6); g.stroke(); } }
+paintGround(WORLD_LOOK.earth);
+const gtex = new THREE.CanvasTexture(gc); gtex.wrapS = gtex.wrapT = THREE.RepeatWrapping; gtex.repeat.set(220, 220); gtex.encoding = THREE.sRGBEncoding; gtex.anisotropy = 8;
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(40000, 40000), new THREE.MeshStandardMaterial({ map: gtex, roughness: 1 }));
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+// mesas on the horizon
+const mesaMat = new THREE.MeshStandardMaterial({ color: 0xb9805a, roughness: 1, flatShading: true });
+for (let i = 0; i < 14; i++) { const a = i / 14 * Math.PI * 2 + 0.3, d = 5200 + (i * 937 % 2600); const m = new THREE.Mesh(new THREE.CylinderGeometry(260 + (i * 71 % 300), 420 + (i * 53 % 380), 120 + (i * 37 % 260), 7), mesaMat); m.position.set(Math.cos(a) * d, 50, Math.sin(a) * d); m.rotation.y = i; scene.add(m); }
+// pad
+const pad = new THREE.Group(); scene.add(pad);
+const padM = new THREE.Mesh(new THREE.CylinderGeometry(32, 33, 0.6, 64), new THREE.MeshStandardMaterial({ color: 0x8e8b86, roughness: 0.9 })); padM.position.y = 0.3; padM.receiveShadow = true; pad.add(padM);
+const ring = new THREE.Mesh(new THREE.RingGeometry(26, 28, 64), new THREE.MeshBasicMaterial({ color: 0xf4ede1 })); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.62; pad.add(ring);
+for (const r of [Math.PI / 4, -Math.PI / 4]) { const b = new THREE.Mesh(new THREE.PlaneGeometry(36, 2.6), new THREE.MeshBasicMaterial({ color: 0xf4ede1 })); b.rotation.set(-Math.PI / 2, 0, r); b.position.y = 0.63; pad.add(b); }
+// glide-slope cone (apex on the pad)
+let glideCone;
+function buildCone() { if (glideCone) scene.remove(glideCone); const H = 2600, R = H / Math.tan(cfg.glide * Math.PI / 180); const geo = new THREE.ConeGeometry(R, H, 72, 1, true); geo.rotateX(Math.PI); geo.translate(0, H / 2, 0);
+  glideCone = new THREE.Group(); glideCone.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xff4f1a, transparent: true, opacity: 0.045, side: THREE.DoubleSide, depthWrite: false })));
+  glideCone.add(new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.ConeGeometry(R, H, 24, 1, true).rotateX(Math.PI).translate(0, H / 2, 0), 1), new THREE.LineBasicMaterial({ color: 0xff4f1a, transparent: true, opacity: 0.16 }))); scene.add(glideCone); }
+buildCone();
+// booster
+const rocket = new THREE.Group(); scene.add(rocket);
+const white = new THREE.MeshStandardMaterial({ color: 0xf2f0ec, roughness: 0.55, metalness: 0.05 }), soot = new THREE.MeshStandardMaterial({ color: 0x2b2b2d, roughness: 0.8 }), steel = new THREE.MeshStandardMaterial({ color: 0x55595f, roughness: 0.4, metalness: 0.7 });
+const body = new THREE.Mesh(new THREE.CylinderGeometry(1.85, 1.85, 40, 32), white); body.position.y = 22.4; body.castShadow = true; rocket.add(body);
+const band = new THREE.Mesh(new THREE.CylinderGeometry(1.87, 1.87, 4, 32), soot); band.position.y = 40.4; rocket.add(band);
+const lower = new THREE.Mesh(new THREE.CylinderGeometry(1.87, 1.87, 6, 32), new THREE.MeshStandardMaterial({ color: 0x9b958d, roughness: 0.9 })); lower.position.y = 5.4; rocket.add(lower);
+const bell = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 1.3, 2.4, 20, 1, true), steel); bell.position.y = 1.2; rocket.add(bell);
+for (let i = 0; i < 4; i++) { const f = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.4, 0.18), steel); const a = i * Math.PI / 2; f.position.set(Math.cos(a) * 2.6, 39.5, Math.sin(a) * 2.6); f.rotation.y = -a; rocket.add(f); }
+const legs = [];
+for (let i = 0; i < 4; i++) { const piv = new THREE.Group(); const a = i * Math.PI / 2 + Math.PI / 4; piv.position.set(Math.cos(a) * 1.9, 3.4, Math.sin(a) * 1.9); piv.rotation.y = -a; const leg = new THREE.Mesh(new THREE.BoxGeometry(0.35, 9.5, 0.5), soot); leg.position.y = 4.75; leg.castShadow = true; piv.add(leg); rocket.add(piv); legs.push(piv); }
+// plume
+const fadeTex = new THREE.CanvasTexture(grad([[0, '#fff'], [0.35, '#aaa'], [1, '#000']], 4, 128));
+const add = (c, o) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, alphaMap: fadeTex, side: THREE.DoubleSide });
+const plumeOuter = new THREE.Mesh(new THREE.ConeGeometry(1.6, 1, 24, 1, true).translate(0, -0.5, 0), add(0xff5a1f, 0.42));
+const plumeInner = new THREE.Mesh(new THREE.ConeGeometry(0.75, 1, 18, 1, true).translate(0, -0.5, 0), add(0xffc77a, 0.7));
+plumeOuter.position.y = plumeInner.position.y = 0; rocket.add(plumeOuter, plumeInner);
+const glow = new THREE.PointLight(0xff7a3a, 0, 140, 2); glow.position.y = -4; rocket.add(glow);
+// particles (exhaust + dust)
+const NP = 900, pPos = new Float32Array(NP * 3), pA = new Float32Array(NP), pS = new Float32Array(NP), pV = new Float32Array(NP * 3), pL = new Float32Array(NP), pM = new Float32Array(NP);
+const pGeo = new THREE.BufferGeometry(); pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3)); pGeo.setAttribute('alpha', new THREE.BufferAttribute(pA, 1)); pGeo.setAttribute('size', new THREE.BufferAttribute(pS, 1));
+let lookKey = '';
+const pMat = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, uniforms: { col: { value: new THREE.Color(0xe9dcc8) } },
+  vertexShader: 'attribute float alpha;attribute float size;varying float vA;void main(){vA=alpha;vec4 mv=modelViewMatrix*vec4(position,1.0);gl_PointSize=size*(420.0/-mv.z);gl_Position=projectionMatrix*mv;}',
+  fragmentShader: 'uniform vec3 col;varying float vA;void main(){vec2 c=gl_PointCoord-0.5;float d=length(c);if(d>0.5)discard;gl_FragColor=vec4(col,vA*(1.0-d*2.0));}' });
+const parts = new THREE.Points(pGeo, pMat); parts.frustumCulled = false; scene.add(parts); let pNext = 0;
+let vscale = 1;
+function applyLook() {
+  const L = WORLD_LOOK[cfg.world] || WORLD_LOOK.earth, V = LOOKS[cfg.veh] || LOOKS.booster, key = cfg.world + '/' + cfg.veh;
+  if (key === lookKey) return; const worldChanged = !lookKey || lookKey.split('/')[0] !== cfg.world; lookKey = key;
+  if (worldChanged) {
+    if (!skyTexs[cfg.world]) { skyTexs[cfg.world] = L.sky ? new THREE.CanvasTexture(grad(L.sky, 4, 512)) : starTex(); skyTexs[cfg.world].encoding = THREE.sRGBEncoding; }
+    scene.background = skyTexs[cfg.world]; scene.fog.color.setHex(L.fog[0]); scene.fog.near = L.fog[1]; scene.fog.far = L.fog[2];
+    hemi.color.setHex(L.hemi[0]); hemi.groundColor.setHex(L.hemi[1]); hemi.intensity = L.hemi[2]; sun.color.setHex(L.sun[0]); sun.intensity = L.sun[1];
+    paintGround(L); gtex.needsUpdate = true; mesaMat.color.setHex(L.mesa); pMat.uniforms.col.value.setHex(L.dust); stageEl.style.background = L.stage;
+  }
+  vscale = V.scale; rocket.scale.setScalar(vscale); white.color.setHex(V.color); dist = 170 * Math.max(0.35, vscale);
+}
+function spawn(p, v, life, size) { const i = pNext; pNext = (pNext + 1) % NP; pPos.set(p, i * 3); pV.set(v, i * 3); pL[i] = life; pM[i] = life; pS[i] = size; }
+// lines
+function mkLine(color, op) { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(3 * 400), 3)); g.setDrawRange(0, 0); const l = new THREE.Line(g, new THREE.LineBasicMaterial({ color, transparent: true, opacity: op })); l.frustumCulled = false; scene.add(l); return l; }
+function updateLine(l, pts) { const a = l.geometry.attributes.position; const n = Math.min(400, pts.length); for (let i = 0; i < n; i++) a.setXYZ(i, pts[i][0], pts[i][1], pts[i][2]); a.needsUpdate = true; l.geometry.setDrawRange(0, n); }
+const planLine = mkLine(0xff4f1a, 0.95), trail = mkLine(0xffffff, 0.7), trailPts = [];
+function refreshPlanLine() { if (!sim.plan) return; const p = sim.plan, pts = []; const tau = sim.t - sim.planT0; for (let k = 0; k <= p.N; k++) { if (k * p.dt >= tau - p.dt) pts.push([p.r[k][0], p.r[k][1] + 0.5, p.r[k][2]]); } updateLine(planLine, pts); }
+// camera
+let camMode = store.get('rls.cam', 'chase'), yaw = 0.9, pitch = 0.22, dist = 170, deploy = 0;
+const q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), tv = new THREE.Vector3();
+function placeRocket() { rocket.position.set(sim.r[0], sim.r[1] + 4.6 * deploy * vscale, sim.r[2]); }
+let drag = null;
+canvas.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY }; canvas.setPointerCapture(e.pointerId); if (camMode !== 'chase') setCam('chase'); });
+canvas.addEventListener('pointermove', e => { if (!drag) return; yaw -= (e.clientX - drag.x) * 0.006; pitch = Math.max(-0.05, Math.min(1.35, pitch + (e.clientY - drag.y) * 0.005)); drag = { x: e.clientX, y: e.clientY }; });
+canvas.addEventListener('pointerup', () => drag = null);
+canvas.addEventListener('wheel', e => { e.preventDefault(); dist = Math.max(45 * Math.max(0.3, vscale), Math.min(1400, dist * (1 + e.deltaY * 0.001))); }, { passive: false });
+function setCam(m) { camMode = m; store.set('rls.cam', m); document.querySelectorAll('#cams button').forEach(b => b.classList.toggle('on', b.dataset.cam === m)); }
+$('#cams').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setCam(b.dataset.cam); });
+setCam(camMode);
+const camPos = new THREE.Vector3(400, 300, 400), camLook = new THREE.Vector3();
+function updateCamera(dt) {
+  const target = tv.set(rocket.position.x, rocket.position.y + 20 * vscale, rocket.position.z);
+  let want;
+  if (camMode === 'chase') want = new THREE.Vector3(target.x + dist * Math.cos(pitch) * Math.cos(yaw), Math.max(3, target.y + dist * Math.sin(pitch)), target.z + dist * Math.cos(pitch) * Math.sin(yaw));
+  else if (camMode === 'pad') { const k = Math.max(0.3, vscale); want = new THREE.Vector3(150 * k, 5 * k, 210 * k); }
+  else want = new THREE.Vector3(1500, 900, 1700);
+  const k = 1 - Math.exp(-dt * 4); camPos.lerp(want, camMode === 'chase' ? 1 : k);
+  camLook.lerp(camMode === 'wide' ? new THREE.Vector3(target.x * 0.5, target.y * 0.45, target.z * 0.5) : target, camMode === 'chase' ? 1 : k);
+  camera.position.copy(camPos); camera.lookAt(camLook);
+}
+function resize() { const w = stageEl.clientWidth, h = stageEl.clientHeight; if (!w || !h) return; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+const ro = new ResizeObserver(resize); ro.observe(stageEl);
+
+// ---------- frame loop ----------
+let last = performance.now(), hudT = 0, sampleT = 0;
+function frame(now) {
+  const dtR = Math.min(0.05, (now - last) / 1000); last = now;
+  if (!paused && sim.phase === 'flight') {
+    const steps = Math.round(dtR * 120 * speed);
+    for (let i = 0; i < steps && sim.phase === 'flight'; i++) {
+      step(sim, cfg, 1 / 120);
+      if (sim.t - sampleT >= 0.1) { sampleT = sim.t; const Tm = Math.hypot(...sim.T); flown.push({ t: sim.t, alt: sim.r[1], acc: Tm / sim.m, amin: sim.veh.Tmin / sim.m, amax: sim.TmaxEff / sim.m, x: sim.r[0], z: sim.r[2], vx: sim.v[0], vy: sim.v[1], vz: sim.v[2], m: sim.m, T: Tm, tx: sim.T[0], ty: sim.T[1], tz: sim.T[2], mode: sim.mode }); trailPts.push([sim.r[0], sim.r[1] + 1, sim.r[2]]); if (trailPts.length > 400) trailPts.splice(0, trailPts.length - 400); }
+    }
+    guidanceTick();
+    if (sim.phase !== 'flight') finish();
+  }
+  // vehicle pose
+  const Tm = Math.hypot(...sim.T), thr = Tm / sim.veh.Tmax;
+  if (Tm > 1) { const dir = new THREE.Vector3(sim.T[0], sim.T[1], sim.T[2]).normalize(); q.setFromUnitVectors(up, dir); rocket.quaternion.slerp(q, 1 - Math.exp(-dtR * 6)); }
+  else rocket.quaternion.slerp(new THREE.Quaternion(), 1 - Math.exp(-dtR * 3));
+  const wantDeploy = (sim.phase === 'flight' && sim.r[1] < 160) || sim.phase === 'landed' || sim.phase === 'crashed' ? 1 : 0;
+  deploy += (wantDeploy - deploy) * (1 - Math.exp(-dtR * 1.6));
+  legs.forEach(l => l.rotation.z = -2.2 * deploy);
+  placeRocket();
+  const fl = 0.85 + 0.3 * Math.random(); const len = thr > 0 ? 10 + 34 * thr : 0;
+  plumeOuter.scale.set(1 + thr * 0.6, len * fl, 1 + thr * 0.6); plumeInner.scale.set(1, len * 0.55 * fl, 1);
+  plumeOuter.visible = plumeInner.visible = len > 0; glow.intensity = thr * 5 * fl;
+  // particles
+  if (thr > 0 && !paused) {
+    const dir = new THREE.Vector3(0, -1, 0).applyQuaternion(rocket.quaternion);
+    if (sim.rho > 0) for (let i = 0; i < 6 * speed; i++) spawn([rocket.position.x + dir.x * 6 * vscale, rocket.position.y + dir.y * 6 * vscale, rocket.position.z + dir.z * 6 * vscale], [dir.x * 60 + (Math.random() - .5) * 8 + sim.v[0] * 0.6, dir.y * 60 + sim.v[1] * 0.6, dir.z * 60 + (Math.random() - .5) * 8 + sim.v[2] * 0.6], 1.2 + Math.random(), (5 + Math.random() * 4) * Math.max(0.4, vscale));
+    if (sim.r[1] < 90) for (let i = 0; i < 10; i++) { const a = Math.random() * Math.PI * 2, s = (25 + Math.random() * 30) * (1 - sim.r[1] / 90); spawn([sim.r[0] + Math.cos(a) * 4, 1, sim.r[2] + Math.sin(a) * 4], [Math.cos(a) * s, 2 + Math.random() * 5, Math.sin(a) * s], 2 + Math.random() * 2, 9 + Math.random() * 10); }
+  }
+  for (let i = 0; i < NP; i++) { if (pL[i] <= 0) { pA[i] = 0; continue; } pL[i] -= dtR; for (let d = 0; d < 3; d++) { pPos[i * 3 + d] += pV[i * 3 + d] * dtR; pV[i * 3 + d] *= 1 - dtR * 1.6; } if (pPos[i * 3 + 1] < 0.5) { pPos[i * 3 + 1] = 0.5; pV[i * 3 + 1] = Math.abs(pV[i * 3 + 1]) * 0.2; } pS[i] += dtR * 6; pA[i] = Math.max(0, pL[i] / pM[i]) * 0.55; }
+  pGeo.attributes.position.needsUpdate = pGeo.attributes.alpha.needsUpdate = pGeo.attributes.size.needsUpdate = true;
+  updateLine(trail, trailPts); refreshPlanLine();
+  sun.position.set(rocket.position.x - 220, rocket.position.y + 260, rocket.position.z - 160); sun.target.position.copy(rocket.position);
+  updateCamera(dtR);
+  if ($('#mission').classList.contains('on')) renderer.render(scene, camera);
+  if (now - hudT > 70) { hudT = now; hud(); }
+  requestAnimationFrame(frame);
+}
+function hud(force) {
+  const s = sim; $('#clock').textContent = `T+ ${s.t.toFixed(1)}`;
+  $('#tAlt').innerHTML = `${fmt(Math.max(0, s.r[1]))}<small> m</small>`;
+  $('#tVs').innerHTML = `${fmt(s.v[1], 1)}<small> m/s</small>`;
+  $('#tHs').innerHTML = `${fmt(Math.hypot(s.v[0], s.v[2]), 1)}<small> m/s</small>`;
+  $('#tMiss').innerHTML = `${fmt(Math.hypot(s.r[0], s.r[2]))}<small> m</small>`;
+  const thr = Math.hypot(...s.T) / s.veh.Tmax; $('#tThr').textContent = `${Math.round(thr * 100)}%`; $('#thrFill').style.width = `${thr * 100}%`; $('#thrMax').style.left = `${s.TmaxEff / s.veh.Tmax * 100}%`;
+  const prop = s.m - s.veh.dry; $('#tFuel').textContent = `${fmt(prop)} kg`; $('#fuelFill').style.width = `${prop / (s.veh.mass - s.veh.dry) * 100}%`; document.querySelector('#mission .meter .mark').style.left = `${s.veh.Tmin / s.veh.Tmax * 100}%`;
+  $('#gMode').textContent = s.phase === 'flight' ? (s.mode === 'emergency' ? 'no solution' : s.pending ? 'solving…' : 'tracking plan') : s.phase;
+  $('#gTgo').textContent = s.plan && s.phase === 'flight' ? `${Math.max(0, s.tEnd - s.t).toFixed(1)} s` : '–';
+  $('#gSolve').textContent = s.plan ? `${s.solveIters} it · ${s.solveMs.toFixed(0)} ms` : '–';
+  $('#gRe').textContent = s.replans;
+  $('#gWind').textContent = s.rho === 0 ? 'none (vacuum)' : s.wind ? `${Math.hypot(...s.wind).toFixed(1)} m/s` : `${cfg.wind} m/s`;
+}
+function finish() {
+  const r = sim.result; setPhase(r.text, false); $('#pause').disabled = true; $('#kick').disabled = true; $('#launch').textContent = 'Fly again';
+  banner(`<h2 style="color:${r.ok ? '#8ff0bd' : '#ff9a8f'}">${r.text}</h2><p>${scenName()} · ${sim.replans} re-plans</p>
+  <div class="row"><div>Touchdown speed<b class="num">${r.vs.toFixed(1)} m/s</b></div><div>Sideways<b class="num">${r.hs.toFixed(1)} m/s</b></div><div>From pad centre<b class="num">${r.miss.toFixed(1)} m</b></div><div>Propellant used<b class="num">${fmt(r.fuel)} kg</b></div></div>
+  <div class="acts"><button class="btn go" data-act="again">Fly again</button><button class="btn" data-act="planner">See the planner</button></div>`);
+  feed(`${r.text}: ${r.vs.toFixed(1)} m/s down, ${r.miss.toFixed(1)} m from centre`, r.ok ? '' : 'fault');
+  const log = store.get('rls.log', []); log.unshift({ at: new Date().toISOString(), name: scenName(), veh: vehName(), world: cfg.world, ok: r.ok, text: r.text, vs: r.vs, miss: r.miss, fuel: r.fuel, t: r.t, replans: sim.replans }); store.set('rls.log', log.slice(0, 60));
+  for (let i = 0; i < 160; i++) { const a = Math.random() * Math.PI * 2, s = 10 + Math.random() * 40; spawn([sim.r[0], 1, sim.r[2]], [Math.cos(a) * s, 1 + Math.random() * 4, Math.sin(a) * s], 2.5 + Math.random() * 2, 12 + Math.random() * 10); }
+  renderStats();
+}
+$('#banner').addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (!b) return; if (b.dataset.act === 'again') startFlight(); else location.hash = 'planner'; });
+$('#launch').addEventListener('click', () => { startFlight(); });
+$('#pause').addEventListener('click', () => { paused = !paused; $('#pause').textContent = paused ? 'Resume' : 'Pause'; setPhase(paused ? 'Paused' : 'Powered descent', !paused); });
+$('#kick').addEventListener('click', () => { if (sim.phase !== 'flight') return; const a = Math.random() * Math.PI * 2; sim.v[0] += Math.cos(a) * 9; sim.v[2] += Math.sin(a) * 9; feed('Shoved sideways at 9 m/s', 'fault'); });
+$('#speed').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; speed = +b.dataset.s; document.querySelectorAll('#speed button').forEach(x => x.classList.toggle('on', x === b)); });
+
+// ---------- charts ----------
+function chart(svg, o) {
+  const W = svg.clientWidth, H = svg.clientHeight; if (!W) return;
+  const pl = 48, pr = 12, pt = 10, pb = 30, small = W < 420;
+  const xs = v => pl + (v - o.x0) / (o.x1 - o.x0 || 1) * (W - pl - pr);
+  const ly = v => o.log ? Math.log10(Math.max(1e-9, v)) : v;
+  const ys = v => pt + (1 - (ly(v) - ly(o.y0)) / (ly(o.y1) - ly(o.y0) || 1)) * (H - pt - pb);
+  let s = `<line class="axis" x1="${pl}" y1="${H - pb}" x2="${W - pr}" y2="${H - pb}"/>`;
+  const nt = small ? 3 : 5;
+  const yt = o.log ? Array.from({ length: Math.floor(ly(o.y1)) - Math.ceil(ly(o.y0)) + 1 }, (_, i) => 10 ** (Math.ceil(ly(o.y0)) + i)) : Array.from({ length: nt + 1 }, (_, i) => o.y0 + (o.y1 - o.y0) * i / nt);
+  for (const v of yt) { const y = ys(v); s += `<line class="axis" x1="${pl}" x2="${W - pr}" y1="${y}" y2="${y}" opacity=".5"/><text x="${pl - 6}" y="${y + 4}" text-anchor="end">${o.log ? '10' + String(Math.round(Math.log10(v))).replace('-', '⁻').replace(/\d/g, d => '⁰¹²³⁴⁵⁶⁷⁸⁹'[d]) : fmt(v)}</text>`; }
+  for (let i = 0; i <= nt; i++) { const v = o.x0 + (o.x1 - o.x0) * i / nt; s += `<text x="${xs(v)}" y="${H - 9}" text-anchor="middle">${fmt(v)}${i === nt ? ' ' + o.xu : ''}</text>`; }
+  for (const se of o.series) {
+    if (!se.pts.length) continue;
+    if (se.dots) { s += se.pts.map(p => p[2] ? `<path d="M${xs(p[0]) - 5} ${ys(o.y0) - 5}l10 10m0 -10l-10 10" stroke="var(--bad)" stroke-width="2"/>` : `<circle cx="${xs(p[0])}" cy="${ys(p[1])}" r="${p[3] ? 7 : 4.5}" fill="${p[3] ? 'var(--orange)' : 'var(--steel)'}" stroke="var(--sheet)" stroke-width="2"/>`).join(''); continue; }
+    let d = ''; se.pts.forEach((p, i) => { const X = xs(p[0]).toFixed(1), Y = ys(p[1]).toFixed(1); d += i ? (se.step ? `H${X}V${Y}` : `L${X} ${Y}`) : `M${X} ${Y}`; });
+    s += `<path class="draw" d="${d}" fill="none" stroke="${se.color}" stroke-width="${se.w || 2.4}" ${se.dash ? `style="animation:none;stroke-dashoffset:0;stroke-dasharray:${se.dash}"` : ''} stroke-linejoin="round"/>`;
+  }
+  svg.innerHTML = s;
+}
+function renderPlanner() {
+  const tMax = Math.max(10, flown.length ? flown[flown.length - 1].t : 0, sim.plan ? sim.tEnd : 0);
+  const p = sim.plan;
+  const planAlt = p ? p.r.map((r, k) => [sim.planT0 + k * p.dt, r[1]]) : [];
+  const yMax = Math.max(100, cfg.alt * 1.05);
+  const p0 = planHistory[0] && planHistory[0].plan, t00 = planHistory[0] && planHistory[0].t0;
+  const openAlt = p0 ? p0.r.map((r, k) => [t00 + k * p0.dt, r[1]]) : [];
+  chart($('#chAlt'), { x0: 0, x1: tMax, y0: 0, y1: yMax, xu: 's', series: [{ pts: openAlt, color: 'var(--steel)', dash: '6 5', w: 2 }, { pts: flown.map(f => [f.t, f.alt]), color: 'var(--ink)' }, { pts: planAlt, color: 'var(--orange)', w: 3 }] });
+  const planAcc = p ? p.sigma.map((s, k) => [sim.planT0 + k * p.dt, s]).concat([[sim.planT0 + p.tf, p.sigma[p.N - 1]]]) : [];
+  const thrTop = Math.max(2, ...flown.map(f => f.amax), ...(p ? p.sigma : []), ...(p0 ? p0.sigma : [])) * 1.12;
+  chart($('#chThr'), { x0: 0, x1: tMax, y0: 0, y1: thrTop, xu: 's', series: [
+    { pts: flown.map(f => [f.t, f.amax]), color: 'var(--steel)', dash: '5 5', w: 1.6 }, { pts: flown.map(f => [f.t, f.amin]), color: 'var(--steel)', dash: '5 5', w: 1.6 },
+    { pts: p0 ? p0.sigma.map((q, k) => [t00 + k * p0.dt, q]).concat([[t00 + p0.tf, p0.sigma[p0.N - 1]]]) : [], color: 'var(--orange)', step: true, dash: '6 5', w: 2 },
+    { pts: flown.map(f => [f.t, f.acc]), color: 'var(--ink)' }, { pts: planAcc, color: 'var(--orange)', step: true, w: 3 }] });
+  const ev = initialSearch; const fe = ev.filter(e => e.feasible);
+  if (ev.length) { const best = fe.reduce((a, b) => (!a || b.fuel < a.fuel ? b : a), null);
+    const xs = ev.map(e => e.tf); chart($('#chTf'), { x0: Math.min(...xs) * 0.95, x1: Math.max(...xs) * 1.02, y0: fe.length ? Math.min(...fe.map(e => e.fuel)) * 0.9 : 0, y1: fe.length ? Math.max(...fe.map(e => e.fuel)) * 1.05 : 1, xu: 's',
+      series: [{ dots: true, pts: ev.map(e => [e.tf, e.fuel || 0, !e.feasible, e === best]) }] }); }
+  else $('#chTf').innerHTML = `<text x="50%" y="50%" text-anchor="middle">Fly a scenario to see the search</text>`;
+  if (lastPlanHist.length) { const h = lastPlanHist; chart($('#chConv'), { x0: 0, x1: h[h.length - 1][0], y0: 1e-6, y1: Math.max(1e-2, ...h.map(q => Math.max(q[1], q[2]))), log: true, xu: 'it', series: [{ pts: h.map(q => [q[0], q[1]]), color: 'var(--orange)' }, { pts: h.map(q => [q[0], q[2]]), color: 'var(--steel)' }] }); }
+  else $('#chConv').innerHTML = `<text x="50%" y="50%" text-anchor="middle">No solve yet</text>`;
+  const r = sim.result;
+  $('#plStats').innerHTML = [['Opening plan: flight time', planHistory[0] ? `${planHistory[0].plan.tf.toFixed(1)} s` : '–'], ['Opening plan: propellant', planHistory[0] ? `${fmt(planHistory[0].plan.fuelKg)} kg` : '–'], ['Re-plans this flight', sim.replans], ['Touchdown', r ? `${r.vs.toFixed(1)} m/s` : sim.phase === 'flight' ? 'in flight' : '–']].map(([a, b]) => `<div><span>${a}</span><b>${b}</b></div>`).join('');
+}
+['#chAlt', '#chThr', '#chTf', '#chConv'].forEach(id => { const roC = new ResizeObserver(() => { if ($('#planner').classList.contains('on')) renderPlanner(); }); roC.observe($(id)); });
+
+// ---------- scenarios ----------
+function scenIcon(c) { const s = 0.025, x = 30 + c.x * s * 0.5, y = 62 - c.alt * s; return `<svg width="100%" height="70" viewBox="0 0 120 70" aria-hidden="true"><rect x="0" y="62" width="120" height="8" fill="var(--line)"/><rect x="${60 - 9}" y="60" width="18" height="3" rx="1" fill="var(--steel)"/><path d="M${60 + c.x * 0.03} ${Math.max(6, 62 - c.alt * 0.022)} Q ${60 + c.x * 0.02} 40 60 60" fill="none" stroke="var(--orange)" stroke-width="2" stroke-dasharray="3 3"/><circle cx="${60 + c.x * 0.03}" cy="${Math.max(6, 62 - c.alt * 0.022)}" r="3.5" fill="var(--orange)"/>${c.wind > 8 ? '<path d="M6 20h22M10 28h16M4 36h20" stroke="var(--steel)" stroke-width="2" stroke-linecap="round"/>' : ''}${c.faultAlt ? '<path d="M96 12l6 10h-12z" fill="var(--bad)"/>' : ''}</svg>`; }
+const VFIELDS = [['mass', 'Full mass (kg)', 50, 500000, 10, 1], ['dry', 'Empty mass (kg)', 20, 400000, 10, 1], ['Tmax', 'Most thrust (kN)', 0.2, 6000, 0.1, 1000], ['Tmin', 'Least thrust (kN)', 0.05, 6000, 0.05, 1000], ['isp', 'Engine efficiency, Isp (s)', 80, 470, 1, 1], ['area', 'Side area facing wind (m²)', 0.2, 600, 0.1, 1]];
+function vehDraft() { const v = {}; for (const [k, , , , , u] of VFIELDS) { const el = document.getElementById('v-' + k); v[k] = el ? parseFloat(el.value) * u : cfg.vehicle[k]; } return v; }
+function vehCheck(v) {
+  const g = WORLDS[cfg.world].g, G0v = 9.80665, bad = [];
+  if (!(v.dry > 0 && v.mass > v.dry)) bad.push('Full mass has to be more than empty mass, or there is no propellant.');
+  if (!(v.Tmax > v.Tmin && v.Tmin > 0)) bad.push('Most thrust has to be more than least thrust.');
+  for (const [k, l, mn, mx, , u] of VFIELDS) if (!(v[k] >= mn * u && v[k] <= mx * u)) bad.push(`${l} should be between ${fmt(mn)} and ${fmt(mx)}.`);
+  const twr = v.Tmax / (v.mass * g), twrMinEmpty = v.Tmin / (v.dry * g), dv = v.isp * G0v * Math.log(v.mass / v.dry), hover = (v.mass - v.dry) * v.isp * G0v / (v.mass * g);
+  const warn = [];
+  if (twr < 1.15) warn.push(`At ${twr.toFixed(2)}× its own weight it can barely slow down. Most landers need 1.5× or more.`);
+  if (twrMinEmpty > 1) warn.push('Even at least thrust it pushes harder than its empty weight, so it may not be able to come down at the end.');
+  return { bad, warn, twr, twrMinEmpty, dv, hover };
+}
+function renderVeh() {
+  const v = cfg.vehicle;
+  $('#vehForm').innerHTML = `<label>Start from<select id="v-preset">${Object.entries(VEHICLES).map(([k, x]) => `<option value="${k}" ${cfg.veh === k ? 'selected' : ''}>${x.name}</option>`).join('')}</select></label>
+    <label>Lands on<select id="v-world">${Object.entries(WORLD_NAMES).map(([k, n]) => `<option value="${k}" ${cfg.world === k ? 'selected' : ''}>${n} (${WORLDS[k].g} m/s² gravity)</option>`).join('')}</select></label>` +
+    VFIELDS.map(([k, l, mn, mx, st, u]) => `<label>${l}<input id="v-${k}" data-v="${k}" type="number" min="${mn}" max="${mx}" step="${st}" value="${+(v[k] / u).toFixed(3)}"></label>`).join('');
+  renderVehRead(v);
+}
+function renderVehRead(v) {
+  const c = vehCheck(v);
+  $('#vehRead').innerHTML = [['Thrust against weight at start', `${c.twr.toFixed(2)}×`, c.twr < 1.15], ['Speed it can shed with its fuel', `${fmt(c.dv)} m/s`], ['Throttle range', `${Math.round(v.Tmin / v.Tmax * 100)}–100%`], ['Longest possible hover', `${fmt(c.hover)} s`]]
+    .map(([a, b, w]) => `<div class="${w ? 'warn' : ''}"><span>${a}</span><b>${isFinite(parseFloat(b)) ? b : '–'}</b></div>`).join('');
+  const n = $('#vehNote'); n.className = 'vnote' + (c.bad.length || c.warn.length ? ' bad' : '');
+  n.textContent = c.bad.length ? c.bad[0] : c.warn.length ? c.warn[0] : `Fine to fly. The planner keeps 14% of the thrust in reserve for wind and faults.`;
+}
+$('#vehForm').addEventListener('change', e => {
+  if (e.target.id === 'v-preset') { cfg.veh = e.target.value; cfg.vehicle = Object.assign({}, VEHICLES[cfg.veh]); }
+  else if (e.target.id === 'v-world') { cfg.world = e.target.value; if (WORLDS[cfg.world].rho === 0) { cfg.wind = 0; cfg.gust = 0; } }
+  else return;
+  scen = { id: 'custom', cfg: clone(cfg) }; store.set('rls.scen', scen); renderScen(); resetSim();
+});
+$('#vehForm').addEventListener('input', e => {
+  if (!e.target.dataset.v) return; const v = vehDraft(); const c = vehCheck(v); renderVehRead(v);
+  if (c.bad.length) return;
+  cfg.vehicle = Object.assign(v, { name: `${VEHICLES[cfg.veh].name} (edited)` }); scen = { id: 'custom', cfg: clone(cfg) }; store.set('rls.scen', scen);
+  document.querySelectorAll('.sc').forEach(s => s.classList.remove('on')); resetSim();
+});
+function renderScen() {
+  $('#scenList').innerHTML = PRESETS.map(p => `<button class="sc ${scen.id === p.id ? 'on' : ''}" data-id="${p.id}" type="button">${scenIcon(p.cfg)}<span class="chip">${WORLD_NAMES[p.cfg.world]} · ${p.cfg.vehicle.name}</span><h3>${p.name}</h3><p>${p.desc}</p></button>`).join('');
+  $('#cfgForm').innerHTML = FIELDS.map(([k, l, mn, mx, st]) => `<label>${l}<input id="f-${k}" type="number" min="${mn}" max="${mx}" step="${st}" value="${cfg[k]}" data-k="${k}"></label>`).join('');
+  renderVeh();
+}
+$('#scenList').addEventListener('click', e => { const b = e.target.closest('.sc'); if (!b) return; const p = PRESETS.find(x => x.id === b.dataset.id); scen = { id: p.id, cfg: clone(p.cfg) }; cfg = clone(p.cfg); store.set('rls.scen', scen); renderScen(); buildCone(); resetSim(); });
+$('#cfgForm').addEventListener('input', e => { const k = e.target.dataset.k; if (!k) return; const [, , mn, mx] = FIELDS.find(f => f[0] === k); const v = Math.min(mx, Math.max(mn, parseFloat(e.target.value))); if (!isFinite(v)) return; cfg[k] = v; scen = { id: 'custom', cfg: clone(cfg) }; store.set('rls.scen', scen); document.querySelectorAll('.sc').forEach(s => s.classList.remove('on')); });
+$('#flyCfg').addEventListener('click', () => { buildCone(); location.hash = 'mission'; setTimeout(startFlight, 350); });
+
+// ---------- log ----------
+function renderLog() {
+  const log = store.get('rls.log', []);
+  const ok = log.filter(l => l.ok);
+  $('#logTitle').textContent = log.length ? `${ok.length} of ${log.length} flights landed on the pad` : 'Flight log';
+  $('#logStats').innerHTML = [['Flights', log.length], ['Landed', ok.length], ['Best touchdown', ok.length ? `${Math.min(...ok.map(l => l.vs)).toFixed(2)} m/s` : '–'], ['Closest to centre', ok.length ? `${Math.min(...ok.map(l => l.miss)).toFixed(1)} m` : '–']].map(([a, b]) => `<div><span>${a}</span><b>${b}</b></div>`).join('');
+  $('#logTable').innerHTML = log.length ? `<thead><tr><th>When</th><th>Scenario</th><th>Vehicle</th><th>Result</th><th class="r">Touchdown</th><th class="r">From centre</th><th class="r">Propellant</th><th class="r">Re-plans</th></tr></thead><tbody>${log.map(l => `<tr><td>${new Date(l.at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</td><td>${l.name}</td><td>${l.veh || 'Orbital booster'} · ${WORLD_NAMES[l.world || 'earth']}</td><td><span class="pill ${l.ok ? 'ok' : 'bad'}">${l.text}</span></td><td class="r">${l.vs.toFixed(2)} m/s</td><td class="r">${l.miss.toFixed(1)} m</td><td class="r">${fmt(l.fuel)} kg</td><td class="r">${l.replans}</td></tr>`).join('')}</tbody>` : `<tbody><tr><td class="empty">No flights yet. Fly one from the Mission view.</td></tr></tbody>`;
+}
+$('#clearLog').addEventListener('click', () => $('#confirm').classList.add('show'));
+$('#cNo').addEventListener('click', () => $('#confirm').classList.remove('show'));
+$('#cYes').addEventListener('click', () => { store.set('rls.log', []); $('#confirm').classList.remove('show'); renderLog(); });
+function renderStats() { const log = store.get('rls.log', []); $('#methodStats').textContent = log.length ? `In this browser: ${log.length} flight${log.length === 1 ? '' : 's'} flown, ${log.filter(l => l.ok).length} landed on the pad.` : ''; }
+
+// ---------- downloads ----------
+let dlCap = null;
+(async () => { try { if (window.claude && window.claude.use) dlCap = await window.claude.use('downloads'); } catch (e) { dlCap = null; }
+  // outside claude.ai: an ordinary browser download
+  if (!dlCap && !window.claude) dlCap = { save: async ({ filename, data }) => { const a = document.createElement('a'), u = URL.createObjectURL(data instanceof Blob ? data : new Blob([data])); a.href = u; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 4000); return { status: 'saved' }; } }; await null; document.querySelectorAll('.dl').forEach(b => b.hidden = !dlCap || (b.id === 'rbCsv' && !(batch && batch.runs.length))); })();
+const num = v => (Number.isInteger(v) ? String(v) : (+v.toFixed(4)).toString());
+const csv = rows => rows.map(r => r.map(v => typeof v === 'number' ? num(v) : typeof v === 'boolean' ? (v ? 'yes' : 'no') : `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n') + '\n';
+const slug = t => t.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const stamp = () => new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
+async function saveFile(btn, filename, text) {
+  if (!dlCap) return; const old = btn.textContent;
+  try { await dlCap.save({ filename, data: new Blob([text], { type: 'text/csv' }) }); btn.textContent = 'Saved'; } catch (e) { btn.textContent = 'Could not save'; }
+  setTimeout(() => btn.textContent = old, 1800);
+}
+$('#dlFlight').addEventListener('click', e => {
+  if (!flown.length) { e.currentTarget.textContent = 'Fly a scenario first'; setTimeout(() => e.target.textContent = 'Download flight data (CSV)', 1600); return; }
+  const rows = [['time_s', 'downrange_m', 'altitude_m', 'crossrange_m', 'v_downrange_ms', 'v_vertical_ms', 'v_crossrange_ms', 'mass_kg', 'thrust_N', 'thrust_x_N', 'thrust_y_N', 'thrust_z_N', 'throttle_pct', 'guidance']];
+  for (const f of flown) rows.push([f.t, f.x, f.alt, f.z, f.vx, f.vy, f.vz, f.m, f.T, f.tx, f.ty, f.tz, f.T / sim.veh.Tmax * 100, f.mode === 'emergency' ? 'emergency' : 'planned']);
+  saveFile(e.currentTarget, `flight-${slug(scenName())}-${stamp()}.csv`, csv(rows));
+});
+$('#dlPlan').addEventListener('click', e => {
+  const p = sim.plan; if (!p) { e.currentTarget.textContent = 'No plan yet'; setTimeout(() => e.target.textContent = 'Download latest plan (CSV)', 1600); return; }
+  const rows = [['node', 'time_s', 'downrange_m', 'altitude_m', 'crossrange_m', 'v_downrange_ms', 'v_vertical_ms', 'v_crossrange_ms', 'thrust_acc_x', 'thrust_acc_y', 'thrust_acc_z', 'thrust_acc_ms2']];
+  for (let k = 0; k <= p.N; k++) { const a = p.a[Math.min(k, p.N - 1)]; rows.push([k, sim.planT0 + k * p.dt, p.r[k][0], p.r[k][1], p.r[k][2], p.v[k][0], p.v[k][1], p.v[k][2], a[0], a[1], a[2], p.sigma[Math.min(k, p.N - 1)]]); }
+  saveFile(e.currentTarget, `plan-${slug(scenName())}-${stamp()}.csv`, csv(rows));
+});
+
+// ---------- reliability ----------
+const batchSrc = document.getElementById('solver-src').textContent + '\n' + document.getElementById('sim-src').textContent + `
+onmessage = e => { const { i, cfg } = e.data; const t0 = performance.now(); const r = flyHeadless(cfg, planLanding); r.ms = performance.now() - t0; postMessage({ i, r }); };`;
+let batch = store.get('rls.batch', null), pool = [], running = false, batchT0 = 0, drawnDots = 0;
+function batchConfigs(base, N, windMax, faultPct, spread, seed0) {
+  let st = seed0; const rnd = () => (st = st * 16807 % 2147483647) / 2147483647, pm = k => 1 + k * spread * (2 * rnd() - 1);
+  const air = WORLDS[base.world].rho > 0;
+  return Array.from({ length: N }, (_, i) => {
+    const alt = base.alt * (1 + 0.15 * spread * rnd()), faulty = rnd() < faultPct / 100;
+    return { alt, x: base.x * pm(0.4), z: base.z * pm(0.4), vx: base.vx * pm(0.3), vz: base.vz * pm(0.3), vy: base.vy * (1 + spread * (0.05 - 0.15 * rnd())),
+      wind: air ? windMax * rnd() : 0, gust: air ? windMax * 0.25 * rnd() : 0, windDir: Math.floor(360 * rnd()),
+      faultAlt: base.faultAlt > 0 ? base.faultAlt : faulty ? Math.round(alt * (0.35 + 0.4 * rnd())) : 0, faultLevel: base.faultAlt > 0 ? base.faultLevel : faulty ? +(0.85 + 0.1 * rnd()).toFixed(2) : 1, seed: 1 + i * 7919 + seed0 % 7907 };
+  });
+}
+function runBatch() {
+  if (running) return;
+  const N = +$('#rbN').value, windMax = Math.max(0, Math.min(25, +$('#rbWind').value || 0)), faultPct = Math.max(0, Math.min(100, +$('#rbFault').value || 0)), spread = +$('#rbSpread').value;
+  const base = clone(cfg), seed0 = 1 + Math.floor(Math.random() * 2e6);
+  const cfgs = batchConfigs(base, N, windMax, faultPct, spread, seed0);
+  batch = { at: new Date().toISOString(), name: scenName(), veh: vehName(), world: cfg.world, base, settings: { N, windMax, faultPct, spread }, cfgs, runs: [] };
+  running = true; batchT0 = performance.now(); drawnDots = 0;
+  const nW = Math.max(2, Math.min(8, (navigator.hardwareConcurrency || 4) - 1)), url = URL.createObjectURL(new Blob([batchSrc], { type: 'text/javascript' }));
+  let next = 0, done = 0;
+  const give = w => { if (next >= N) return; const i = next++; w.postMessage({ i, cfg: Object.assign({}, base, cfgs[i]) }); };
+  pool = Array.from({ length: Math.min(nW, N) }, () => { const w = new Worker(url); w.onmessage = e => { if (!running) return; const { i, r } = e.data; r.i = i; batch.runs.push(r); done++; if (done >= N) endBatch(true); else { give(w); renderBatch(); } }; w.onerror = () => { done++; if (done >= N) endBatch(true); else give(w); }; return w; });
+  pool.forEach(give);
+  $('#rbGo').hidden = true; $('#rbStop').hidden = false; $('#rbCsv').hidden = true; $('#rbProgBox').classList.add('run');
+  renderBatch();
+}
+function endBatch(complete) {
+  running = false; pool.forEach(w => w.terminate()); pool = [];
+  batch.complete = complete; batch.runs.sort((a, b) => a.i - b.i); batch = Object.assign({}, batch, { cfgs: undefined, runs: batch.runs.map(r => Object.assign({}, r, { cfg: batch.cfgs[r.i] })) }); store.set('rls.batch', batch);
+  $('#rbGo').hidden = false; $('#rbGo').textContent = 'Run again'; $('#rbStop').hidden = true; $('#rbCsv').hidden = !dlCap || !batch.runs.length; $('#rbProgBox').classList.remove('run');
+  $('#navRb').innerHTML = 'Reliability'; renderBatch(true);
+}
+const runCfg = r => r.cfg || (batch.cfgs && batch.cfgs[r.i]) || {};
+const kindOf = r => r.ok ? 'ok' : r.text === 'Vehicle lost on impact' || r.text === 'Did not land' ? 'lost' : 'hard';
+const KCOL = { ok: 'var(--ok)', hard: '#e0a100', lost: 'var(--bad)' };
+function pct(a, q) { if (!a.length) return 0; const s = a.slice().sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(q * s.length))]; }
+function renderBatch(final) {
+  const b = batch, runs = b ? b.runs : [], N = b ? b.settings.N : 0, ok = runs.filter(r => r.ok);
+  const sub = `${(b ? b.veh : vehName())} on ${WORLD_NAMES[b ? b.world : cfg.world]}`;
+  $('#rbScen').textContent = running || b ? `${b.name}` : scenName(); $('#rbScenSub').textContent = running || b ? `${sub} · ${b.settings.N} flights, wind up to ${b.settings.windMax} m/s, ${b.settings.faultPct}% with an engine fault${b.at && !running ? ' · run ' + new Date(b.at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : ''}` : `${vehName()} on ${WORLD_NAMES[cfg.world]}. Change the scenario or vehicle in Scenarios.`;
+  const frac = N ? runs.length / N : 0; $('#rbProg').style.width = `${frac * 100}%`;
+  if (running) { const el = (performance.now() - batchT0) / 1000, left = runs.length ? el / runs.length * (N - runs.length) : 0; $('#rbProgT').textContent = `${runs.length} of ${N} flown on ${pool.length} background workers${runs.length ? ` · about ${left > 90 ? Math.round(left / 60) + ' min' : Math.max(1, Math.round(left)) + ' s'} left` : ' · first results in a few seconds'}`; $('#navRb').innerHTML = `Reliability<span class="pct">${Math.round(frac * 100)}%</span>`; }
+  else $('#rbProgT').textContent = b ? (b.complete ? `All ${runs.length} flights done.` : `Stopped after ${runs.length} of ${N} flights.`) : 'Pick the settings and run the test. Each flight takes a few seconds; they run side by side.';
+  if (!b || !runs.length) {
+    $('#rbTitle').textContent = 'Fly the same landing many times and count how often it works'; $('#rbStats').innerHTML = '';
+    for (const id of ['#rbScatter', '#rbHist', '#rbWindCh']) $(id).innerHTML = `<text x="50%" y="50%" text-anchor="middle">${running ? 'Flying…' : 'No test run yet'}</text>`;
+    $('#rbCauses').innerHTML = ''; $('#rbFail').innerHTML = ''; return;
+  }
+  const rate = ok.length / runs.length;
+  $('#rbTitle').textContent = `${ok.length} of ${runs.length} landed on the pad (${Math.round(rate * 100)}%)`;
+  $('#rbStats').innerHTML = [['Success rate', `${(rate * 100).toFixed(rate === 1 || rate === 0 ? 0 : 1)}%`], ['Typical touchdown', ok.length ? `${pct(ok.map(r => r.vs), 0.5).toFixed(2)} m/s` : '–'], ['95% landed within', ok.length ? `${pct(ok.map(r => r.miss), 0.95).toFixed(1)} m` : '–'], ['Average propellant', `${fmt(runs.reduce((a, r) => a + r.fuel, 0) / runs.length)} kg`]].map(([a, v]) => `<div><span>${a}</span><b>${v}</b></div>`).join('');
+  // scatter
+  const sc = $('#rbScatter'), W = sc.clientWidth || 400, H = sc.clientHeight || 400, ext = Math.min(3000, Math.max(36, ...runs.map(r => Math.hypot(r.x, r.z) * 1.1)));
+  const S = Math.min(W, H) / 2 - 14, cx = W / 2, cy = H / 2, X = v => cx + v / ext * S, Y = v => cy + v / ext * S;
+  if (sc.dataset.ext !== String(ext)) { drawnDots = 0; sc.dataset.ext = ext; }
+  let g = `<circle cx="${cx}" cy="${cy}" r="${S}" fill="none" class="axis"/><line class="axis" x1="${cx - S}" x2="${cx + S}" y1="${cy}" y2="${cy}" opacity=".5"/><line class="axis" y1="${cy - S}" y2="${cy + S}" x1="${cx}" x2="${cx}" opacity=".5"/>`;
+  g += `<circle cx="${cx}" cy="${cy}" r="${25 / ext * S}" fill="color-mix(in srgb,var(--orange) 8%,transparent)" stroke="var(--orange)" stroke-width="2"/><text x="${cx + 25 / ext * S * 0.72 + 4}" y="${cy - 25 / ext * S * 0.72 - 4}">pad edge</text><text x="${cx + S - 2}" y="${cy - 6}" text-anchor="end">${fmt(ext)} m</text>`;
+  g += runs.map((r, j) => `<circle class="${j >= drawnDots ? 'dotp' : ''}" cx="${X(r.x).toFixed(1)}" cy="${Y(r.z).toFixed(1)}" r="4.5" fill="${KCOL[kindOf(r)]}" stroke="var(--sheet)" stroke-width="1.5"><title>Flight ${r.i + 1}: ${r.text}, ${r.miss.toFixed(1)} m from centre</title></circle>`).join('');
+  sc.innerHTML = g; drawnDots = runs.length;
+  // histogram
+  const hs = $('#rbHist'), HW = hs.clientWidth || 400, HH = hs.clientHeight || 260, top = Math.min(20, Math.max(4, Math.ceil(Math.max(...runs.map(r => r.vs)))));
+  const bw = top <= 6 ? 0.25 : 0.5, nb = Math.ceil(top / bw), bins = new Array(nb).fill(0); runs.forEach(r => bins[Math.min(nb - 1, Math.floor(r.vs / bw))]++);
+  const pl = 40, pb = 28, pt = 10, mx = Math.max(1, ...bins), bx = i => pl + i / nb * (HW - pl - 10), byy = c => HH - pb - c / mx * (HH - pb - pt);
+  let h = `<line class="axis" x1="${pl}" x2="${HW - 10}" y1="${HH - pb}" y2="${HH - pb}"/>`;
+  for (let k = 0; k <= 4; k++) { const c = Math.round(mx * k / 4), y = byy(c); h += `<line class="axis" x1="${pl}" x2="${HW - 10}" y1="${y}" y2="${y}" opacity=".4"/><text x="${pl - 6}" y="${y + 4}" text-anchor="end">${c}</text>`; }
+  bins.forEach((c, i) => { if (!c) return; const v = i * bw, col = v >= 8 ? 'var(--bad)' : v >= 3 ? '#e0a100' : 'var(--ok)'; h += `<rect class="${final ? 'barr' : ''}" style="animation-delay:${i * 25}ms" x="${bx(i) + 1}" width="${Math.max(1, bx(1) - bx(0) - 2)}" y="${byy(c)}" height="${HH - pb - byy(c)}" rx="2" fill="${col}"><title>${c} flight${c === 1 ? '' : 's'} at ${v.toFixed(2)}–${(v + bw).toFixed(2)} m/s</title></rect>`; });
+  for (const v of [0, 3, top <= 8 ? top : 8, top].filter((x, i, a) => a.indexOf(x) === i)) h += `<text x="${bx(v / bw)}" y="${HH - 9}" text-anchor="middle">${v}${v === top ? (Math.max(...runs.map(r => r.vs)) > top ? '+ m/s' : ' m/s') : ''}</text>`;
+  if (3 < top) h += `<line x1="${bx(3 / bw)}" x2="${bx(3 / bw)}" y1="${pt}" y2="${HH - pb}" stroke="#e0a100" stroke-dasharray="4 4"/>`;
+  hs.innerHTML = h;
+  // wind vs miss
+  const ws = $('#rbWindCh'), WW = ws.clientWidth || 400, WH = ws.clientHeight || 260, wmax = Math.max(1, ...runs.map(r => r.wind)), mmax = Math.max(5, ...runs.map(r => r.miss)) * 1.08;
+  const wx = v => 44 + v / wmax * (WW - 56), wy = v => WH - 28 - v / mmax * (WH - 40);
+  let w = `<line class="axis" x1="44" x2="${WW - 12}" y1="${WH - 28}" y2="${WH - 28}"/>`;
+  for (let k = 0; k <= 4; k++) { const v = mmax * k / 4, y = wy(v); w += `<line class="axis" x1="44" x2="${WW - 12}" y1="${y}" y2="${y}" opacity=".4"/><text x="38" y="${y + 4}" text-anchor="end">${fmt(v)}${k === 4 ? " m" : ""}</text>`; }
+  for (let k = 0; k <= 4; k++) { const v = wmax * k / 4; w += `<text x="${wx(v)}" y="${WH - 9}" text-anchor="middle">${v.toFixed(0)}${k === 4 ? ' m/s wind' : ''}</text>`; }
+  if (25 < mmax) w += `<line x1="44" x2="${WW - 12}" y1="${wy(25)}" y2="${wy(25)}" stroke="var(--orange)" stroke-dasharray="5 4"/><text x="${WW - 14}" y="${wy(25) - 5}" text-anchor="end" style="fill:var(--orange2)">pad edge</text>`;
+  w += runs.map(r => { const c = KCOL[kindOf(r)]; return `<circle cx="${wx(r.wind).toFixed(1)}" cy="${wy(r.miss).toFixed(1)}" r="4.5" fill="${r.fault ? 'var(--sheet)' : c}" stroke="${c}" stroke-width="${r.fault ? 2 : 1}"><title>Flight ${r.i + 1}: wind ${r.wind.toFixed(1)} m/s, ${r.miss.toFixed(1)} m from centre${r.fault ? ', engine fault' : ''}</title></circle>`; }).join('');
+  ws.innerHTML = w;
+  // failures
+  const bad = runs.filter(r => !r.ok), causes = {};
+  bad.forEach(r => causes[r.text] = (causes[r.text] || 0) + 1);
+  const noPlan = runs.filter(r => !r.planned).length, faults = runs.filter(r => r.fault), faultOk = faults.filter(r => r.ok).length;
+  $('#rbCauses').innerHTML = (bad.length ? Object.entries(causes).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<div class="cause"><span>${k}</span><b>${n}</b></div>`).join('') : `<div class="cause"><span>No failures</span><b>0</b></div>`) +
+    (noPlan ? `<div class="cause"><span>No safe plan existed at the start</span><b>${noPlan}</b></div>` : '') + (faults.length ? `<div class="cause"><span>Engine faults survived</span><b>${faultOk} of ${faults.length}</b></div>` : '');
+  $('#rbFail').innerHTML = bad.slice(0, 40).map(r => { const c = runCfg(r); return `<div class="fail"><b>Flight ${r.i + 1} · ${r.text}</b><small>${r.vs.toFixed(1)} m/s down, ${r.miss.toFixed(0)} m from centre · started ${fmt(c.alt || 0)} m up at ${fmt(-(c.vy || 0))} m/s · wind ${(+r.wind).toFixed(1)} m/s${c.faultAlt ? ` · engine fell to ${Math.round(c.faultLevel * 100)}% at ${fmt(c.faultAlt)} m` : ''}${r.planned ? '' : ' · no safe plan at start'}</small><button class="sbtn" data-replay="${r.i}" type="button">Replay in 3D</button></div>`; }).join('');
+}
+$('#rbGo').addEventListener('click', runBatch);
+$('#rbStop').addEventListener('click', () => { if (running) endBatch(false); });
+$('#rbFail').addEventListener('click', e => {
+  const b = e.target.closest('[data-replay]'); if (!b || !batch) return; const r = batch.runs.find(x => x.i === +b.dataset.replay); if (!r) return;
+  cfg = withVehicle(Object.assign(clone(batch.base), runCfg(r))); scen = { id: 'custom', cfg: clone(cfg) }; store.set('rls.scen', scen); buildCone(); resetSim();
+  location.hash = 'mission'; setTimeout(startFlight, 350);
+});
+$('#rbCsv').addEventListener('click', e => {
+  if (!batch || !batch.runs.length) return;
+  const rows = [['flight', 'result', 'landed', 'touchdown_speed_ms', 'sideways_speed_ms', 'miss_m', 'touchdown_x_m', 'touchdown_z_m', 'propellant_kg', 'flight_time_s', 'replans', 'plan_at_start', 'wind_ms', 'gust_ms', 'wind_from_deg', 'fault_alt_m', 'thrust_after_fault', 'start_alt_m', 'start_x_m', 'start_z_m', 'start_vx_ms', 'start_vy_ms', 'start_vz_ms', 'seed']];
+  for (const r of batch.runs) { const c = runCfg(r); rows.push([r.i + 1, r.text, r.ok, r.vs, r.hs, r.miss, r.x, r.z, r.fuel, r.t, r.replans, r.planned, c.wind, c.gust, c.windDir, c.faultAlt, c.faultLevel, c.alt, c.x, c.z, c.vx, c.vy, c.vz, c.seed]); }
+  saveFile(e.currentTarget, `reliability-${slug(batch.name)}-${batch.runs.length}-flights-${stamp()}.csv`, csv(rows));
+});
+['#rbScatter', '#rbHist', '#rbWindCh'].forEach(id => new ResizeObserver(() => { if ($('#reliab').classList.contains('on') && !running) { drawnDots = 1e9; renderBatch(); } }).observe($(id)));
+
+// ---------- router ----------
+const VIEWS = ['mission', 'planner', 'scenarios', 'reliab', 'log', 'method'];
+function route() {
+  const v = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'mission';
+  document.querySelectorAll('.view').forEach(s => s.classList.toggle('on', s.id === v));
+  document.querySelectorAll('#nav a').forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + v));
+  if (v === 'mission') requestAnimationFrame(resize);
+  if (v === 'planner') requestAnimationFrame(renderPlanner);
+  if (v === 'scenarios') renderScen();
+  if (v === 'log') renderLog();
+  if (v === 'reliab') { drawnDots = running ? drawnDots : 0; renderBatch(!running); }
+  if (v === 'method') renderStats();
+  window.scrollTo(0, 0);
+}
+addEventListener('hashchange', route);
+renderScen(); resetSim(); route(); requestAnimationFrame(frame);
+setInterval(() => { if ($('#planner').classList.contains('on') && sim.phase === 'flight') renderPlanner(); }, 1000);
+}
+</script>
+</body>
+</html>
