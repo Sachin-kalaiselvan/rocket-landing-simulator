@@ -440,7 +440,7 @@ function solveLanding(p) {
   }
   let fuel = 0; for (let k = 0; k < N; k++) fuel += sigma[k] * dt;
   const term = Math.hypot(...r[N]) + Math.hypot(...v[N]);
-  const feasible = rp < 5e-4 && term < 5e-3;
+  const feasible = rp < 2e-4 && term < 5e-3; // feasible runs end below 1e-4; infeasible ones stall above 1e-3 (see bench/)
   return { tf: p.tf, N, dt, a, sigma, r, v, fuel, iters: Math.min(it, maxIt), primal: rp, dual: rd, hist, feasible, x: Array.from(x), terminalError: term, refactors, rho: rho0 };
 }
 
@@ -458,17 +458,22 @@ function planLanding(req) {
     const amin = [], amax = []; let mk = req.mass; const dt = tf / N * T;
     for (let k = 0; k < N; k++) {
       amin.push(req.Tmin / mk / A); amax.push(req.Tmax / mk / A);
-      const acc = prev ? prev.sigma[k] * A : 0.6 * req.Tmax / req.mass;
-      mk = Math.max(req.dry, mk - dt * mk * acc / (req.isp * g0));
+      // first guess: the engine at full thrust, which gives the lightest mass profile (most optimistic bounds);
+      // later passes use the mass the previous solution actually burns
+      const flow = prev ? mk * prev.sigma[k] * A : req.Tmax;
+      mk = Math.max(req.dry, mk * Math.exp(-dt * flow / mk / (req.isp * g0)));
     }
     return { amin, amax };
   };
   const solveAt = (tfReal, warm) => {
     const tf = tfReal / T;
     let b = bounds(tf, null), sol = null;
-    for (let pass = 0; pass < 2; pass++) {
-      sol = solveLanding({ r0, v0, tf, N, amin: b.amin, amax: b.amax, tanGlide, tanPoint, warm: warm || (sol && { x: sol.x }), maxIt: req.maxIt || 2500 });
+    // successive approximation of the mass profile: re-solve until the fuel stops changing
+    for (let pass = 0; pass < (req.passes || 5); pass++) {
+      const prevFuel = sol && sol.feasible ? sol.fuel : null;
+      sol = solveLanding({ r0, v0, tf, N, amin: b.amin, amax: b.amax, tanGlide, tanPoint, warm: (sol && { x: sol.x }) || warm, maxIt: req.maxIt || 2500 });
       if (!sol.feasible) break;
+      if (prevFuel !== null && Math.abs(sol.fuel - prevFuel) < 1e-4 * prevFuel) break;
       b = bounds(tf, sol);
     }
     return sol;

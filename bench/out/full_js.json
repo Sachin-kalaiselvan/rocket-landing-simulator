@@ -1,0 +1,192 @@
+[
+ {
+  "name": "Mars lander (Blackmore et al. 2010, case 1)",
+  "feasible": true,
+  "tf": 79.21594856870179,
+  "fuelKg": 362.4889056592981,
+  "thrustBoundViolation": 0.0005776870177623749,
+  "ms": 2876.292118,
+  "evals": 18
+ },
+ {
+  "name": "Mars lander, 30 deg glide slope",
+  "feasible": false,
+  "ms": 1456.624571
+ },
+ {
+  "name": "Booster 1",
+  "feasible": true,
+  "tf": 34.06670188308525,
+  "fuelKg": 4304.084393273122,
+  "thrustBoundViolation": 0.000019048078967539313,
+  "ms": 2928.310301,
+  "evals": 18
+ },
+ {
+  "name": "Booster 2",
+  "feasible": true,
+  "tf": 33.40927506139405,
+  "fuelKg": 4259.57220159041,
+  "thrustBoundViolation": 0.000016831078147124597,
+  "ms": 3165.672161,
+  "evals": 18
+ },
+ {
+  "name": "Booster 3",
+  "feasible": true,
+  "tf": 30.600256341843647,
+  "fuelKg": 3777.4695675952607,
+  "thrustBoundViolation": 0.00002871520435456723,
+  "ms": 3594.064077,
+  "evals": 18
+ },
+ {
+  "name": "Booster 4",
+  "feasible": true,
+  "tf": 35.44909169773582,
+  "fuelKg": 4367.07219935843,
+  "thrustBoundViolation": 0.000049680698619077335,
+  "ms": 3904.983721,
+  "evals": 18
+ },
+ {
+  "name": "Booster 5",
+  "feasible": true,
+  "tf": 30.748401742595114,
+  "fuelKg": 3885.472769172342,
+  "thrustBoundViolation": 0.0003558037551518503,
+  "ms": 1823.516648,
+  "evals": 18
+ },
+ {
+  "name": "Booster 6",
+  "feasible": true,
+  "tf": 27.766766425706358,
+  "fuelKg": 3654.998557860825,
+  "thrustBoundViolation": 0.00000299624761121818,
+  "ms": 2775.374496,
+  "evals": 18
+ },
+ {
+  "name": "Booster 7",
+  "feasible": false,
+  "ms": 1553.196047
+ },
+ {
+  "name": "Booster 8",
+  "feasible": true,
+  "tf": 33.20439517282136,
+  "fuelKg": 4269.353103029134,
+  "thrustBoundViolation": 0,
+  "ms": 3277.621249,
+  "evals": 18
+ },
+ {
+  "name": "Booster 9",
+  "feasible": true,
+  "tf": 33.44598220209293,
+  "fuelKg": 4291.057879720611,
+  "thrustBoundViolation": 0,
+  "ms": 3090.323022,
+  "evals": 18
+ },
+ {
+  "name": "Booster 10",
+  "feasible": true,
+  "tf": 26.975912928440405,
+  "fuelKg": 3464.2208002852494,
+  "thrustBoundViolation": 0.000008730208898746487,
+  "ms": 3164.504456,
+  "evals": 18
+ },
+ {
+  "name": "Booster 11",
+  "feasible": true,
+  "tf": 31.626205748710866,
+  "fuelKg": 4031.0119429076476,
+  "thrustBoundViolation": 0.000009450446346900695,
+  "ms": 3172.489695,
+  "evals": 18
+ },
+ {
+  "name": "Booster 12",
+  "feasible": true,
+  "tf": 25.913473449819204,
+  "fuelKg": 3461.8318998863506,
+  "thrustBoundViolation": 0.000011147063336207578,
+  "ms": 3431.722635,
+  "evals": 18
+ },
+ {
+  "name": "Booster 13",
+  "feasible": true,
+  "tf": 33.10344481382813,
+  "fuelKg": 4104.382037545478,
+  "thrustBoundViolation": 0,
+  "ms": 2119.589828,
+  "evals": 18
+ },
+ {
+  "name": "Booster 14",
+  "feasible": true,
+  "tf": 26.39237872915184,
+  "fuelKg": 3580.981750350311,
+  "thrustBoundViolation": 0.000009535438328342468,
+  "ms": 2613.041416,
+  "evals": 18
+ },
+ {
+  "name": "Booster 15",
+  "feasible": true,
+  "tf": 31.685411475342196,
+  "fuelKg": 4043.2182996210468,
+  "thrustBoundViolation": 0.000041367779860997366,
+  "ms": 3469.556476,
+  "evals": 18
+ },
+ {
+  "name": "Booster 16",
+  "feasible": true,
+  "tf": 33.91977279682995,
+  "fuelKg": 4287.252652145435,
+  "thrustBoundViolation": 0.000024241711842064634,
+  "ms": 3503.22454,
+  "evals": 18
+ },
+ {
+  "name": "Booster 17",
+  "feasible": true,
+  "tf": 30.25682788942854,
+  "fuelKg": 3894.937385681471,
+  "thrustBoundViolation": 0.000003483005984066631,
+  "ms": 2291.123934,
+  "evals": 18
+ },
+ {
+  "name": "Booster 18",
+  "feasible": true,
+  "tf": 30.613388050783847,
+  "fuelKg": 3916.4576589426943,
+  "thrustBoundViolation": 0.00010643705663371119,
+  "ms": 3496.584171,
+  "evals": 18
+ },
+ {
+  "name": "Booster 19",
+  "feasible": true,
+  "tf": 30.03508650792525,
+  "fuelKg": 3992.5723172953294,
+  "thrustBoundViolation": 0.000008220168257593021,
+  "ms": 2930.799417,
+  "evals": 18
+ },
+ {
+  "name": "Booster 20",
+  "feasible": true,
+  "tf": 33.253122161308696,
+  "fuelKg": 4304.920632271518,
+  "thrustBoundViolation": 0.000005449550816940897,
+  "ms": 2432.796325,
+  "evals": 18
+ }
+]

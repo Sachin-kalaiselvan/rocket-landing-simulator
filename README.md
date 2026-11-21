@@ -11,6 +11,14 @@ Fuel-optimal powered-descent guidance, solved live in the browser. A booster (or
 - **Reliability testing.** Flies a scenario 25 to 250 times with random start state, wind and engine faults across parallel Web Workers. Reports success rate, touchdown scatter, touchdown-speed histogram and failure causes, with replay of any failure in 3D.
 - **Exports.** Flight data, the latest plan and reliability results as CSV.
 
+## Validation
+
+Each layer was checked against an independent reference. Full method and numbers are in [docs/VALIDATION.md](docs/VALIDATION.md).
+
+- **Solver vs Clarabel and ECOS:** on 200 problems, fuel agrees within 0.0025%. It never calls an infeasible problem feasible.
+- **Planner vs G-FOLD** (Açıkmeşe and Ploen 2007; Blackmore et al. 2010), on the published Mars lander case and 19 boosters: within 0.14% of the optimum propellant. The Mars case lands in 79.2 s using 362.5 kg, against 79.4 s and 362.5 kg for the reference. This check found and fixed a mass-model flaw that had been costing up to 3.6% extra propellant.
+- **400 Monte Carlo flights** with wind, gusts and engine faults: 96.3% landed on the pad, and every flight without a fault did. Faults that left 87% thrust or more were all survived; deeper faults exceed the planner's 14% thrust reserve.
+
 ## Run it
 
 Open `index.html` in a browser. Nothing to install.
@@ -18,6 +26,7 @@ Open `index.html` in a browser. Nothing to install.
 ```
 python3 build.py        # rebuild index.html from src/
 node test/landings.js   # fly the presets headless and check the results
+python3 test/reference_check.py   # solver vs Clarabel and ECOS (needs: pip install cvxpy clarabel ecos)
 ```
 
 `src/solver.js` is the optimiser, `src/sim.js` the flight model and guidance loop, `src/index.src.html` the interface (three.js).
