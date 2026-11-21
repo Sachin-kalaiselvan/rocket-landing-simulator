@@ -7,6 +7,8 @@ endif()
 find_package(Eigen3 REQUIRED)
 # Epigraph: a C++ modelling layer for second-order cone programs, here with the ECOS solver.
 # Use -DEPIGRAPH_DIR=/path/to/Epigraph for a local checkout, otherwise it is fetched.
+# ECOS's branch-and-bound file calls memcpy without including string.h; GCC 14 rejects that
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -include string.h")
 include(FetchContent)
 set(ENABLE_ECOS TRUE CACHE BOOL "" FORCE)
 set(ENABLE_OSQP FALSE CACHE BOOL "" FORCE)
