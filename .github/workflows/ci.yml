@@ -14,5 +14,12 @@ jobs:
         run: python3 test/reference_check.py
       - name: Closed-loop landings for every vehicle and world
         run: node test/landings.js
+      - name: 6-DOF guidance (C++) builds, converges and matches the Python reference
+        run: |
+          sudo apt-get update && sudo apt-get install -y libeigen3-dev
+          cmake -S cpp -B cpp/build && cmake --build cpp/build -j 2
+          cpp/build/rocket6dof > /tmp/landing.json
+          pip install scipy
+          python3 -c "import json,subprocess,sys; exec(open('bench/scvx6_ref.py').read().split(\"if __name__\")[0]); c=json.load(open('/tmp/landing.json')); X,U,s,l=scvx(); d=abs(c['m_final']-X[-1,0]); print('mass diff',d); sys.exit(0 if d<1e-4 and c['final_state_error']<1e-5 else 1)"
       - name: Page builds from source
         run: python3 build.py

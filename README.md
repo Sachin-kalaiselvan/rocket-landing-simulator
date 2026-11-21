@@ -11,6 +11,15 @@ Fuel-optimal powered-descent guidance, solved live in the browser. A booster (or
 - **Reliability testing.** Flies a scenario 25 to 250 times with random start state, wind and engine faults across parallel Web Workers. Reports success rate, touchdown scatter, touchdown-speed histogram and failure causes, with replay of any failure in 3D.
 - **Exports.** Flight data, the latest plan and reliability results as CSV.
 
+## 6-DOF guidance in C++
+
+`cpp/` adds full rigid-body landing guidance: attitude, body rates and gimbal limits, solved with successive convexification (Szmuk and Açıkmeşe, 2018) using ECOS.
+- It matches an independent Python implementation to 0.0001% of propellant.
+- It solves in 0.29 s.
+- In closed loop with model errors and re-planning, it lands upright on target in 91 of 100 runs.
+
+Method, checks and failure analysis are in [docs/SIXDOF.md](docs/SIXDOF.md).
+
 ## Validation
 
 Each layer was checked against an independent reference. Full method and numbers are in [docs/VALIDATION.md](docs/VALIDATION.md).
