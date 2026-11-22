@@ -1,45 +1,48 @@
-# Rocket Landing Simulator
+# rocket-landing-simulator
 
-Fuel-optimal powered-descent guidance, solved live in the browser. A booster (or a hopper, Mars lander or lunar lander) comes in high and fast; the planner finds the thrust profile that lands it on the pad using the least propellant, then re-solves about once a second as wind, gusts, shoves and engine faults push it off course.
+fuel-optimal powered descent guidance, solved live in your browser tab. a booster (or a hopper, mars lander, lunar lander) comes in high and fast, the planner works out the thrust profile that puts it on the pad using the least propellant, then re-solves about once a second while wind, gusts, shoves and engine faults try to knock it off.
 
-## What is in it
+## what's in here
 
-- **Convex guidance (lossless convexification, G-FOLD style).** The non-convex minimum-throttle limit is relaxed with a slack variable; the relaxed problem is convex and its optimum sits on the real limits. Constraints: exact dynamics with gravity, thrust bounds, engine tilt, glide slope.
-- **A conic solver written from scratch.** No optimisation library. ADMM over 120 thrust variables with cached factorisation and adaptive step size. Flight time is found by golden-section search.
-- **Closed-loop flight.** 120 Hz point-mass model with drag, Ornstein–Uhlenbeck gusts and thrust faults. Re-plans keep the touchdown time if they can and slip it otherwise. If no safe landing exists, it says so and brakes as hard as it can.
-- **Your own vehicle.** Enter mass, thrust range, Isp and area; land on Earth, Mars or the Moon.
-- **Reliability testing.** Flies a scenario 25 to 250 times with random start state, wind and engine faults across parallel Web Workers. Reports success rate, touchdown scatter, touchdown-speed histogram and failure causes, with replay of any failure in 3D.
-- **Exports.** Flight data, the latest plan and reliability results as CSV.
+- **convex guidance, G-FOLD style.** the min-throttle limit isn't convex, so it gets relaxed with a slack variable (lossless convexification). relaxed problem is convex and the optimum still sits on the real limits. dynamics w/ gravity, thrust bounds, engine tilt, glide slope all in there
+- **my own conic solver.** zero optimisation libraries. ADMM over 120 thrust variables, cached factorisation, adaptive step. flight time found by golden-section search
+- **closed loop flight.** 120 Hz point mass w/ drag, ornstein-uhlenbeck gusts, thrust faults. re-plans keep the touchdown time if they can, slip it if they can't. if there's no safe landing left it tells you and brakes as hard as it can
+- **bring your own vehicle.** mass, thrust range, isp, area. land on earth, mars or the moon
+- **reliability runs.** fly a scenario 25 to 250 times with random start, wind and faults across parallel web workers. success rate, touchdown scatter, touchdown speed histogram, why each failure happened, and you can replay any failure in 3D
+- **csv export** for flight data, latest plan, reliability results
 
-## 6-DOF guidance in C++
+## 6-DOF in c++
 
-`cpp/` adds full rigid-body landing guidance: attitude, body rates and gimbal limits, solved with successive convexification (Szmuk and Açıkmeşe, 2018) using ECOS.
-- It matches an independent Python implementation to 0.0001% of propellant.
-- It solves in 0.29 s.
-- In closed loop with model errors and re-planning, it lands upright on target in 91 of 100 runs.
+`cpp/` has full rigid-body landing guidance: attitude, body rates, gimbal limits. successive convexification (szmuk & açıkmeşe 2018) on top of ECOS.
 
-Method, checks and failure analysis are in [docs/SIXDOF.md](docs/SIXDOF.md).
+- matches a separate python implementation to 0.0001% of propellant
+- solves in 0.29s
+- closed loop with model errors + re-planning: lands upright on target 91/100 runs
 
-## Validation
+method, checks and the failures are in [docs/SIXDOF.md](docs/SIXDOF.md).
 
-Each layer was checked against an independent reference. Full method and numbers are in [docs/VALIDATION.md](docs/VALIDATION.md).
+## does it actually work
 
-- **Solver vs Clarabel and ECOS:** on 200 problems, fuel agrees within 0.0025%. It never calls an infeasible problem feasible.
-- **Planner vs G-FOLD** (Açıkmeşe and Ploen 2007; Blackmore et al. 2010), on the published Mars lander case and 19 boosters: within 0.14% of the optimum propellant. The Mars case lands in 79.2 s using 362.5 kg, against 79.4 s and 362.5 kg for the reference. This check found and fixed a mass-model flaw that had been costing up to 3.6% extra propellant.
-- **400 Monte Carlo flights** with wind, gusts and engine faults: 96.3% landed on the pad, and every flight without a fault did. Faults that left 87% thrust or more were all survived; deeper faults exceed the planner's 14% thrust reserve.
+every layer got checked against something that shares zero code with it. full writeup in [docs/VALIDATION.md](docs/VALIDATION.md).
 
-## Run it
+- **solver vs clarabel + ECOS**, 200 problems: fuel agrees within 0.0025%. never calls an infeasible problem feasible
+- **planner vs G-FOLD** (açıkmeşe & ploen 2007, blackmore et al. 2010) on the published mars lander case + 19 boosters: within 0.14% of optimal propellant. mars case lands in 79.2s on 362.5 kg vs 79.4s / 362.5 kg for the reference. this check also caught a mass model bug that was burning up to 3.6% extra fuel, fixed now
+- **400 monte carlo flights** w/ wind, gusts, faults: 96.3% on the pad, and every single no-fault flight made it. faults leaving ≥87% thrust: all survived. deeper than that eats past the planner's 14% thrust reserve
 
-Open `index.html` in a browser. Nothing to install.
+## run it
 
+open `index.html`. that's it.
+
+```bash
+python3 build.py                   # rebuild index.html from src/
+node test/landings.js              # fly the presets headless + check them
+python3 test/reference_check.py    # solver vs clarabel & ECOS (pip install cvxpy clarabel ecos)
 ```
-python3 build.py        # rebuild index.html from src/
-node test/landings.js   # fly the presets headless and check the results
-python3 test/reference_check.py   # solver vs Clarabel and ECOS (needs: pip install cvxpy clarabel ecos)
-```
 
-`src/solver.js` is the optimiser, `src/sim.js` the flight model and guidance loop, `src/index.src.html` the interface (three.js).
+`src/solver.js` = optimiser, `src/sim.js` = flight model + guidance loop, `src/index.src.html` = the UI (three.js).
 
-## Simplifications
+## what's simplified
 
-Point mass with ideal attitude control, one engine, flat ground, simple drag. Mass loss is handled by successive approximation inside each solve.
+point mass with ideal attitude control, one engine, flat ground, basic drag. mass loss handled by successive approximation inside each solve.
+
+MIT
