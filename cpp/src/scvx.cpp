@@ -86,7 +86,7 @@ Result solve(const Params &p, const Options &o, const Trajectory *warm) {
     Result R; R.traj = warm ? *warm : initial_guess(p, K);
     Trajectory &ref = R.traj;
 
-    // ---- problem data that changes every iteration (Epigraph dynamic parameters) ----
+    // problem data that changes every iteration (epigraph dynamic parameters)
     std::vector<Mxx> A(K - 1); std::vector<Mxu> Bm(K - 1), Bp(K - 1); std::vector<Vx> S(K - 1), z(K - 1);
     std::vector<Vx> Xr(K); std::vector<Vu> Ur(K), Uhat(K); double sr = ref.sigma;
     for (int k = 0; k < K - 1; ++k) { A[k].setZero(); Bm[k].setZero(); Bp[k].setZero(); S[k].setZero(); z[k].setZero(); }

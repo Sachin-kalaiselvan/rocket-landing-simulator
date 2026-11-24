@@ -71,14 +71,14 @@ dispersions:
 - sideways speeds ±30%
 - sink rate −10 to +5%
 - steady wind 0 to 12 m/s from anywhere, gusts up to 3 m/s
-- in 20% of flights an engine fault partway down cuts max thrust to 85–95%
+- in 20% of flights an engine fault partway down cuts max thrust to 85-95%
 
 | | flights | on the pad |
 |---|---|---|
 | no fault | 320 | **320 (100%)** |
 | fault leaving ≥87% thrust | 62 | **62 (100%)** |
 | fault leaving <87% thrust | 18 | 3 (7 more touched down intact off the pad, 4 hard off the pad, 4 lost) |
-| **all** | **400** | **385 (96.3%, 95% CI 93.9–97.7%)** |
+| **all** | **400** | **385 (96.3%, 95% CI 93.9-97.7%)** |
 
 for the ones that landed:
 - **touchdown speed:** median 0.82 m/s, p95 1.02 m/s

@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-/* VOICE: a flight-test range console at dawn — exact numbers, calm, no decoration that isn't data.
+/* VOICE: a flight-test range console at dawn - exact numbers, calm, no decoration that isn't data.
    IDEA: the range-safety display: live vehicle, its planned path and the envelope it must stay inside.
    PICTURE: the 3D landing zone with booster, plume, planned trajectory and glide-slope cone, full bleed.
    COLOUR and TYPE: desert sand + graphite, international orange for the vehicle and its plan; Barlow Semi Condensed numerals, IBM Plex text.
@@ -782,7 +782,7 @@ const $ = s => document.querySelector(s);
 const fmt = (n, d = 0) => Number(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
 const store = { get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} } };
 
-// ---------- scenarios ----------
+// scenarios
 const VEHICLES = {
   booster: { name: 'Orbital booster', mass: 30000, dry: 24000, Tmax: 450e3, Tmin: 180e3, isp: 282, area: 148 },
   hopper: { name: 'Test hopper', mass: 1800, dry: 1300, Tmax: 30000, Tmin: 10000, isp: 240, area: 8 },
@@ -816,7 +816,7 @@ const scenName = () => (PRESETS.find(p => p.id === scen.id) || { name: 'Custom f
 const vehName = c => (c || cfg).vehicle.name || 'Custom vehicle';
 const clone = o => JSON.parse(JSON.stringify(o));
 
-// ---------- worker ----------
+// worker
 const wsrc = document.getElementById('solver-src').textContent + `
 onmessage = e => {
   const { id, reqs, search } = e.data; const t0 = performance.now();
@@ -829,7 +829,7 @@ let jobId = 0; const jobs = {};
 worker.onmessage = e => { const j = jobs[e.data.id]; if (!j) return; if (e.data.progress) { j.onProgress && j.onProgress(e.data.progress); return; } delete jobs[e.data.id]; j.done(e.data.plan); };
 const runJob = (msg, done, onProgress) => { const id = ++jobId; jobs[id] = { done, onProgress }; worker.postMessage(Object.assign({ id }, msg)); return id; };
 
-// ---------- sim state ----------
+// sim state
 let sim = makeSim(cfg), speed = 1, paused = false, flightId = 0, initialSearch = [];
 const flown = []; // {t, alt, acc, amin, amax}
 let lastPlanHist = [], planHistory = [];
@@ -892,7 +892,7 @@ function guidanceTick() {
   });
 }
 
-// ---------- three.js scene ----------
+// three.js scene
 const canvas = $('#gl'), stageEl = $('#stage');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(2, devicePixelRatio)); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -1002,7 +1002,7 @@ function updateCamera(dt) {
 function resize() { const w = stageEl.clientWidth, h = stageEl.clientHeight; if (!w || !h) return; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
 const ro = new ResizeObserver(resize); ro.observe(stageEl);
 
-// ---------- frame loop ----------
+// frame loop
 let last = performance.now(), hudT = 0, sampleT = 0;
 function frame(now) {
   const dtR = Math.min(0.05, (now - last) / 1000); last = now;
@@ -1071,7 +1071,7 @@ $('#pause').addEventListener('click', () => { paused = !paused; $('#pause').text
 $('#kick').addEventListener('click', () => { if (sim.phase !== 'flight') return; const a = Math.random() * Math.PI * 2; sim.v[0] += Math.cos(a) * 9; sim.v[2] += Math.sin(a) * 9; feed('Shoved sideways at 9 m/s', 'fault'); });
 $('#speed').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; speed = +b.dataset.s; document.querySelectorAll('#speed button').forEach(x => x.classList.toggle('on', x === b)); });
 
-// ---------- charts ----------
+// charts
 function chart(svg, o) {
   const W = svg.clientWidth, H = svg.clientHeight; if (!W) return;
   const pl = 48, pr = 12, pt = 10, pb = 30, small = W < 420;
@@ -1117,7 +1117,7 @@ function renderPlanner() {
 }
 ['#chAlt', '#chThr', '#chTf', '#chConv'].forEach(id => { const roC = new ResizeObserver(() => { if ($('#planner').classList.contains('on')) renderPlanner(); }); roC.observe($(id)); });
 
-// ---------- scenarios ----------
+// scenarios
 function scenIcon(c) { const s = 0.025, x = 30 + c.x * s * 0.5, y = 62 - c.alt * s; return `<svg width="100%" height="70" viewBox="0 0 120 70" aria-hidden="true"><rect x="0" y="62" width="120" height="8" fill="var(--line)"/><rect x="${60 - 9}" y="60" width="18" height="3" rx="1" fill="var(--steel)"/><path d="M${60 + c.x * 0.03} ${Math.max(6, 62 - c.alt * 0.022)} Q ${60 + c.x * 0.02} 40 60 60" fill="none" stroke="var(--orange)" stroke-width="2" stroke-dasharray="3 3"/><circle cx="${60 + c.x * 0.03}" cy="${Math.max(6, 62 - c.alt * 0.022)}" r="3.5" fill="var(--orange)"/>${c.wind > 8 ? '<path d="M6 20h22M10 28h16M4 36h20" stroke="var(--steel)" stroke-width="2" stroke-linecap="round"/>' : ''}${c.faultAlt ? '<path d="M96 12l6 10h-12z" fill="var(--bad)"/>' : ''}</svg>`; }
 const VFIELDS = [['mass', 'Full mass (kg)', 50, 500000, 10, 1], ['dry', 'Empty mass (kg)', 20, 400000, 10, 1], ['Tmax', 'Most thrust (kN)', 0.2, 6000, 0.1, 1000], ['Tmin', 'Least thrust (kN)', 0.05, 6000, 0.05, 1000], ['isp', 'Engine efficiency, Isp (s)', 80, 470, 1, 1], ['area', 'Side area facing wind (m²)', 0.2, 600, 0.1, 1]];
 function vehDraft() { const v = {}; for (const [k, , , , , u] of VFIELDS) { const el = document.getElementById('v-' + k); v[k] = el ? parseFloat(el.value) * u : cfg.vehicle[k]; } return v; }
@@ -1167,7 +1167,7 @@ $('#scenList').addEventListener('click', e => { const b = e.target.closest('.sc'
 $('#cfgForm').addEventListener('input', e => { const k = e.target.dataset.k; if (!k) return; const [, , mn, mx] = FIELDS.find(f => f[0] === k); const v = Math.min(mx, Math.max(mn, parseFloat(e.target.value))); if (!isFinite(v)) return; cfg[k] = v; scen = { id: 'custom', cfg: clone(cfg) }; store.set('rls.scen', scen); document.querySelectorAll('.sc').forEach(s => s.classList.remove('on')); });
 $('#flyCfg').addEventListener('click', () => { buildCone(); location.hash = 'mission'; setTimeout(startFlight, 350); });
 
-// ---------- log ----------
+// log
 function renderLog() {
   const log = store.get('rls.log', []);
   const ok = log.filter(l => l.ok);
@@ -1180,7 +1180,7 @@ $('#cNo').addEventListener('click', () => $('#confirm').classList.remove('show')
 $('#cYes').addEventListener('click', () => { store.set('rls.log', []); $('#confirm').classList.remove('show'); renderLog(); });
 function renderStats() { const log = store.get('rls.log', []); $('#methodStats').textContent = log.length ? `In this browser: ${log.length} flight${log.length === 1 ? '' : 's'} flown, ${log.filter(l => l.ok).length} landed on the pad.` : ''; }
 
-// ---------- downloads ----------
+// downloads
 let dlCap = null;
 (async () => { try { if (window.claude && window.claude.use) dlCap = await window.claude.use('downloads'); } catch (e) { dlCap = null; }
   // outside claude.ai: an ordinary browser download
@@ -1207,7 +1207,7 @@ $('#dlPlan').addEventListener('click', e => {
   saveFile(e.currentTarget, `plan-${slug(scenName())}-${stamp()}.csv`, csv(rows));
 });
 
-// ---------- reliability ----------
+// reliability
 const batchSrc = document.getElementById('solver-src').textContent + '\n' + document.getElementById('sim-src').textContent + `
 onmessage = e => { const { i, cfg } = e.data; const t0 = performance.now(); const r = flyHeadless(cfg, planLanding); r.ms = performance.now() - t0; postMessage({ i, r }); };`;
 let batch = store.get('rls.batch', null), pool = [], running = false, batchT0 = 0, drawnDots = 0;
@@ -1311,7 +1311,7 @@ $('#rbCsv').addEventListener('click', e => {
 });
 ['#rbScatter', '#rbHist', '#rbWindCh'].forEach(id => new ResizeObserver(() => { if ($('#reliab').classList.contains('on') && !running) { drawnDots = 1e9; renderBatch(); } }).observe($(id)));
 
-// ---------- router ----------
+// router
 const VIEWS = ['mission', 'planner', 'scenarios', 'reliab', 'log', 'method'];
 function route() {
   const v = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'mission';
